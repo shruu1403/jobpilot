@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0B1220;
+  --foreground: #F8FAFC;
+  --sidebar-bg: #0F172A;
+  --sidebar-border: rgba(255, 255, 255, 0.05);
+  --navbar-bg: rgba(11, 18, 32, 0.8);
+  --accent-blue: #3B82F6;
+  --accent-purple: #8B5CF6;
+  --muted-text: #94A3B8;
+  --input-bg: #1E293B;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-navbar-bg: var(--navbar-bg);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-purple: var(--accent-purple);
+  --color-muted-text: var(--muted-text);
+  --color-input-bg: var(--input-bg);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.glass {
+  backdrop-filter: blur(8px);
+  background: var(--navbar-bg);
+}
+
+.card-glow:hover {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
