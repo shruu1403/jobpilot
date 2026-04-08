@@ -36,7 +36,7 @@ export function Sidebar() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <Image src="/logo.png" alt="JobPilot Logo" width={32} height={32} className="rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
-            <h1 className="text-xl font-black tracking-tighter text-white uppercase italic">JobPilot</h1>
+            <h1 className="text-xl font-black text-white uppercase">JobPilot</h1>
           </div>
           <span className="text-[10px] font-black tracking-[0.3em] text-accent-blue/80 uppercase">
             AI Career Suite

@@ -75,6 +75,7 @@ Evaluate based on:
 - Skills match
 - Experience relevance
 - Keyword alignment
+- ATS (Applicant Tracking System) formatting issues
 
 Return ONLY valid JSON:
 
@@ -85,13 +86,18 @@ Return ONLY valid JSON:
   "suggestions": [
     "improvement suggestion 1",
     "improvement suggestion 2"
+  ],
+  "atsIssues": [
+    "formatting issue 1",
+    "formatting issue 2"
   ]
 }
 
 Rules:
 - No extra text
 - Strict JSON only
-- Keep output concise`;
+- Keep output concise
+- atsIssues should list specific ATS problems like missing keywords, weak action verbs, improper formatting, lack of measurable achievements`;
 
     // 4. Call Gemini (single call)
     const text = await callGemini(prompt);
@@ -109,6 +115,7 @@ Rules:
         reason: analysis.reason ?? "Analysis complete.",
         skillGaps: Array.isArray(analysis.skillGaps) ? analysis.skillGaps : [],
         suggestions: Array.isArray(analysis.suggestions) ? analysis.suggestions : [],
+        atsIssues: Array.isArray(analysis.atsIssues) ? analysis.atsIssues : [],
       });
     } catch (parseError) {
       console.error("[Analyze] JSON Parse Error. Raw response:", text);

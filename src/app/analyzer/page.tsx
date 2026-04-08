@@ -4,22 +4,27 @@ import { useState, useEffect } from "react";
 import { useUser } from "@/hooks/useUser";
 import { ResumeUploader } from "@/components/analyzer/ResumeUploader";
 import { Resume } from "@/types/resume";
+import { Analysis } from "@/types/analysis";
 import { 
   History as HistoryIcon, 
   Sparkles, 
-  Wand2, 
   FileEdit,
   ArrowRight,
   Loader2,
   Lock,
-  RefreshCw
+  RefreshCw,
+  AlertOctagon,
+  Download
 } from "lucide-react";
+import Image from "next/image";
 import { JobDescriptionInput } from "@/components/analyzer/JobDescriptionInput";
 import { MatchScoreCard } from "@/components/analyzer/MatchScoreCard";
 import { SkillGapsCard } from "@/components/analyzer/SkillGapsCard";
 import { SuggestionsCard } from "@/components/analyzer/SuggestionsCard";
+import { HistoryModal } from "@/components/analyzer/HistoryModal";
 import toast from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
+import { exportToPDF, exportToDOCX } from "@/lib/exportUtils";
 
 const DAILY_LIMIT = 5;
 
@@ -29,24 +34,38 @@ export default function AnalyzerPage() {
   const [jobDescription, setJobDescription] = useState("");
   const [jobUrl, setJobUrl] = useState("");
 
-  // Analysis results (all from ONE API call)
+  // Raw extracted resume text (needed for secondary actions)
+  const [rawResumeText, setRawResumeText] = useState("");
+
+  // Primary Analysis results
   const [matchScore, setMatchScore] = useState(0);
   const [analysisReason, setAnalysisReason] = useState("");
   const [skillGaps, setSkillGaps] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [atsIssues, setAtsIssues] = useState<string[]>([]);
+  
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisComplete, setAnalysisComplete] = useState(false);
   
+  // Secondary Features States
+  const [coverLetter, setCoverLetter] = useState("");
+  const [generatingLetter, setGeneratingLetter] = useState(false);
+  
+  const [fixedResume, setFixedResume] = useState<any>(null);
+  const [atsImprovements, setAtsImprovements] = useState<string[]>([]);
+  const [fixingResume, setFixingResume] = useState(false);
+
   // Quota and redundancy
   const [lastAnalyzedResumeId, setLastAnalyzedResumeId] = useState<string | null>(null);
   const [lastAnalyzedJD, setLastAnalyzedJD] = useState("");
   const [dailyAnalyses, setDailyAnalyses] = useState(0);
 
+  // History modal state
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const handleResumeChange = (resume: Resume | null) => {
     setSelectedResume(resume);
-    if (!resume) {
-      resetResults();
-    }
+    if (!resume) resetResults();
   };
 
   const resetResults = () => {
@@ -56,16 +75,18 @@ export default function AnalyzerPage() {
     setAnalysisReason("");
     setSkillGaps([]);
     setSuggestions([]);
+    setAtsIssues([]);
+    setRawResumeText("");
+    setCoverLetter("");
+    setFixedResume(null);
     setLastAnalyzedResumeId(null);
     setLastAnalyzedJD("");
     setAnalysisComplete(false);
   };
 
-  // Load daily quota from localStorage
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     const storedData = localStorage.getItem(`jobpilot_quota_${user?.id || "guest"}`);
-
     if (storedData) {
       const { date, count } = JSON.parse(storedData);
       setDailyAnalyses(date === today ? count : 0);
@@ -94,9 +115,12 @@ export default function AnalyzerPage() {
       setAnalysisReason("");
       setSkillGaps([]);
       setSuggestions([]);
+      setAtsIssues([]);
+      setCoverLetter("");
+      setFixedResume(null);
       setAnalysisComplete(false);
 
-      // Step 1: Download file from Supabase and extract text
+      // Extract File
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("resumes")
         .download(selectedResume.file_path);
@@ -106,12 +130,8 @@ export default function AnalyzerPage() {
       const formData = new FormData();
       formData.append("file", fileData);
 
-      const extractRes = await fetch("/api/extract", {
-        method: "POST",
-        body: formData,
-      });
+      const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
 
-      // Safe JSON parsing for extract response
       const contentType = extractRes.headers.get("content-type");
       let extractData;
       if (contentType && contentType.includes("application/json")) {
@@ -124,30 +144,56 @@ export default function AnalyzerPage() {
       const { text: resumeText, error: extractErr } = extractData;
       if (extractErr) throw new Error(extractErr);
 
-      // Step 2: SINGLE API call for ALL analysis
+      setRawResumeText(resumeText); // Save for quick-fix/cover letter
+
+      // AI Analysis
       const analyzeRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resumeText,
-          jobDescription,
-        }),
+        body: JSON.stringify({ resumeText, jobDescription }),
       });
 
       const data = await analyzeRes.json();
 
       if (analyzeRes.ok) {
-        // Set ALL results from the single response
         setMatchScore(data.matchScore);
         setAnalysisReason(data.reason);
         setSkillGaps(data.skillGaps || []);
         setSuggestions(data.suggestions || []);
+        setAtsIssues(data.atsIssues || []);
         setAnalysisComplete(true);
-
         setLastAnalyzedResumeId(selectedResume.id);
         setLastAnalyzedJD(jobDescription);
         incrementQuota();
-        toast.success("Analysis complete — scroll down for full results");
+        toast.success("Analysis complete");
+
+        // Auto-save analysis to Supabase
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        console.log("[History] Current user at save time:", currentUser?.id || "NOT FOUND");
+        if (currentUser?.id) {
+          const payload = {
+            user_id: currentUser.id,
+            resume_name: selectedResume.file_name,
+            job_title: extractJobTitle(jobDescription),
+            company: extractCompany(jobDescription),
+            job_description: jobDescription,
+            match_score: data.matchScore,
+            skill_gaps: data.skillGaps || [],
+            suggestions: data.suggestions || [],
+            // Note: ats_issues, reason, tags, and resume_id are omitted 
+            // since they don't exist in the current Supabase schema.
+          };
+          console.log("[History] Saving analysis:", payload);
+          const { error: insertError } = await supabase.from("analyses").insert(payload);
+          if (insertError) {
+            console.error("[History] Supabase insert error:", insertError);
+            toast.error("Failed to save to history: " + insertError.message);
+          } else {
+            console.log("[History] Analysis saved successfully");
+          }
+        } else {
+          console.warn("[History] No user ID — skipping save");
+        }
       } else {
         throw new Error(data.error || "Analysis failed");
       }
@@ -157,6 +203,146 @@ export default function AnalyzerPage() {
       setAnalyzing(false);
     }
   };
+
+  // ----------------------------------------------------
+  // SECONDARY ACTION: Quick Fix Resume (ATS Repair)
+  // ----------------------------------------------------
+  const handleQuickFix = async () => {
+    if (!rawResumeText) {
+      toast.error("You must run analysis first");
+      return;
+    }
+
+    try {
+      setFixingResume(true);
+      const res = await fetch("/api/quick-fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText: rawResumeText })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setFixedResume({
+        header: data.header,
+        summary: data.summary,
+        skills: data.skills,
+        projects: data.projects,
+        education: data.education,
+      });
+      setAtsImprovements(data.improvements || []);
+      toast.success("Resume repaired and formatting optimized!");
+    } catch (err: any) {
+      toast.error(err.message || "Quick Fix failed");
+    } finally {
+      setFixingResume(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // SECONDARY ACTION: Cover Letter Generation
+  // ----------------------------------------------------
+  const handleDraftCoverLetter = async () => {
+    if (!rawResumeText || !jobDescription) {
+      toast.error("You must provide both a resume and job description.");
+      return;
+    }
+
+    try {
+      setGeneratingLetter(true);
+      const res = await fetch("/api/cover-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText: rawResumeText, jobDescription })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setCoverLetter(data.coverLetter);
+      toast.success("Cover letter generated seamlessly!");
+    } catch (err: any) {
+      toast.error(err.message || "Cover Letter generation failed");
+    } finally {
+      setGeneratingLetter(false);
+    }
+  };
+
+  // Helper to render a contact item (clickable if it has a URL)
+  const renderContactItem = (item: any, idx: number, total: number) => (
+    <span key={idx}>
+      {item.url ? (
+        <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{item.text}</a>
+      ) : (
+        <span>{item.text}</span>
+      )}
+      {idx < total - 1 && <span className="text-gray-400 mx-1">|</span>}
+    </span>
+  );
+
+  // -----------------------------------------------
+  // History Handlers
+  // -----------------------------------------------
+  const handleHistoryView = (analysis: Analysis) => {
+    setMatchScore(analysis.match_score);
+    setAnalysisReason(analysis.reason);
+    setSkillGaps(analysis.skill_gaps || []);
+    setSuggestions(analysis.suggestions || []);
+    setAtsIssues(analysis.ats_issues || []);
+    setJobDescription(analysis.job_description);
+    setAnalysisComplete(true);
+    setCoverLetter("");
+    setFixedResume(null);
+    toast.success("Loaded analysis from history");
+  };
+
+  const handleHistoryReanalyze = (analysis: Analysis) => {
+    setJobDescription(analysis.job_description);
+    setCoverLetter("");
+    setFixedResume(null);
+    setAnalysisComplete(false);
+    setLastAnalyzedResumeId(null);
+    setLastAnalyzedJD("");
+    toast("Job description loaded — select a resume and click Analyze", { icon: "🔄" });
+  };
+
+  // -----------------------------------------------
+  // Helpers: extract job title, company, tags from JD
+  // -----------------------------------------------
+  function extractJobTitle(jd: string): string {
+    const lines = jd.split("\n").map((l) => l.trim()).filter(Boolean);
+    // Common patterns: "Job Title: ...", "Role: ...", or just first short line
+    for (const line of lines.slice(0, 5)) {
+      const titleMatch = line.match(/^(?:job\s*title|role|position)\s*[:–\-]\s*(.+)/i);
+      if (titleMatch) return titleMatch[1].trim().slice(0, 100);
+    }
+    // Fallback: first line under 80 chars is likely the title
+    const shortLine = lines.find((l) => l.length > 3 && l.length < 80);
+    return shortLine?.slice(0, 100) || "Untitled Role";
+  }
+
+  function extractCompany(jd: string): string | null {
+    const lines = jd.split("\n").map((l) => l.trim()).filter(Boolean);
+    for (const line of lines.slice(0, 10)) {
+      const compMatch = line.match(/^(?:company|organization|employer)\s*[:–\-]\s*(.+)/i);
+      if (compMatch) return compMatch[1].trim().slice(0, 100);
+    }
+    return null;
+  }
+
+  function extractTags(jd: string): string[] {
+    const tags: string[] = [];
+    const lower = jd.toLowerCase();
+    if (lower.includes("remote")) tags.push("Remote");
+    if (lower.includes("hybrid")) tags.push("Hybrid");
+    if (lower.includes("on-site") || lower.includes("onsite")) tags.push("On-site");
+    if (lower.includes("full-time") || lower.includes("full time")) tags.push("Full-time");
+    if (lower.includes("part-time") || lower.includes("part time")) tags.push("Part-time");
+    if (lower.includes("contract")) tags.push("Contract");
+    if (lower.includes("internship") || lower.includes("intern")) tags.push("Internship");
+    return tags;
+  }
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-10 space-y-12 animate-in fade-in duration-700">
@@ -174,13 +360,18 @@ export default function AnalyzerPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button className="px-6 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white font-bold text-sm transition-all flex items-center gap-2 group">
+          <button 
+            onClick={() => setHistoryOpen(true)}
+            className="px-6 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white font-bold text-sm transition-all flex items-center gap-2 group hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/20"
+          >
             <HistoryIcon size={18} className="group-hover:rotate-[-15deg] transition-transform" />
-            <span className="relative">
-              Analysis Count
-              <span className="absolute -top-6 -right-2 px-1.5 py-0.5 bg-blue-500 rounded text-[9px] font-black text-white">{dailyAnalyses}/{DAILY_LIMIT}</span>
-            </span>
+            <span>View History</span>
           </button>
+          <div className="px-4 py-2.5 bg-white/[0.03] border border-white/5 rounded-xl text-muted-text text-xs font-bold flex items-center gap-1.5">
+            <span className="text-blue-400 font-black">{dailyAnalyses}</span>
+            <span>/ {DAILY_LIMIT}</span>
+            <span className="text-white/20 ml-0.5">today</span>
+          </div>
           <button 
             onClick={handleAnalyze}
             disabled={!selectedResume || !jobDescription || analyzing || isLimitReached || isRedundant}
@@ -214,11 +405,7 @@ export default function AnalyzerPage() {
 
       {/* Main Grid Section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        
-        {/* Left Column - INPUTS */}
         <div className="lg:col-span-12 xl:col-span-8 space-y-10">
-          
-          {/* Resume Upload Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-3 ml-2">
               <span className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-400 uppercase">01</span>
@@ -228,12 +415,10 @@ export default function AnalyzerPage() {
               <ResumeUploader 
                 userId={user.id} 
                 selectedResume={selectedResume}
-                onSelect={(resume) => handleResumeChange(resume)}
+                onSelect={handleResumeChange}
               />
             )}
           </div>
-
-          {/* Job Description Section */}
           <div className="space-y-4">
             <JobDescriptionInput 
               value={jobDescription}
@@ -245,58 +430,238 @@ export default function AnalyzerPage() {
           </div>
         </div>
 
-        {/* Right Column - RESULTS */}
         <div className="lg:col-span-12 xl:col-span-4 space-y-6 transition-all duration-1000">
-          
-          {/* Match Score */}
           <MatchScoreCard score={matchScore} reason={analysisReason} loading={analyzing} />
-
-          {/* Skill Gaps — real AI data */}
           <SkillGapsCard gaps={skillGaps} active={analysisComplete} />
-
-          {/* AI Suggestions — real AI data */}
           <SuggestionsCard suggestions={suggestions} active={analysisComplete} />
         </div>
-
       </div>
 
-      {/* Footer Tools Area (Placeholder) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-white/5 opacity-50 grayscale blur-[1px] pointer-events-none">
+      {/* NEW: Secondary Features Section (Visible after Analyze) */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-white/5 transition-all duration-1000 ${analysisComplete ? "opacity-100" : "opacity-30 grayscale blur-[2px] pointer-events-none"}`}>
         
         {/* Cover Letter Block */}
-        <div className="bg-gradient-to-br from-[#111827] to-[#0B1220] border border-white/5 rounded-[40px] p-10 flex items-center justify-between group">
-          <div className="space-y-4 max-w-sm">
-            <h3 className="text-2xl font-black text-white leading-tight">Generate a tailored cover letter</h3>
-            <p className="text-muted-text text-sm font-medium leading-relaxed">
-              Our AI can draft a professional letter that highlights your strengths while addressing the gaps identified.
-            </p>
-            <button className="px-8 py-3 bg-white text-black font-black text-xs uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-xl">
-              Draft Now
-            </button>
+        <div className="bg-gradient-to-br from-[#111827] to-[#0B1220] border border-white/5 rounded-[40px] p-10 flex flex-col justify-start gap-6 relative overflow-hidden group h-fit">
+          <div className="flex items-center justify-between z-10 relative">
+            <div className="space-y-4 max-w-[260px]">
+              <h3 className="text-2xl font-black text-white leading-tight">Generate a tailored cover letter</h3>
+              <p className="text-muted-text text-sm font-medium leading-relaxed">
+                Our AI can draft a professional letter that highlights your strengths while addressing the gaps identified.
+              </p>
+              {!coverLetter ? (
+                <button 
+                  onClick={handleDraftCoverLetter} 
+                  disabled={generatingLetter}
+                  className="px-8 py-3 bg-white text-black font-black text-xs uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-xl disabled:opacity-50 flex items-center gap-2"
+                >
+                  {generatingLetter ? <Loader2 size={14} className="animate-spin" /> : "Draft Now"}
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => exportToPDF(coverLetter, "Cover_Letter")} className="px-4 py-2 bg-blue-500/20 text-blue-400 font-bold text-xs uppercase rounded-xl hover:bg-blue-500/30 transition flex items-center gap-1">
+                    <Download size={14} /> PDF
+                  </button>
+                  <button onClick={() => exportToDOCX(coverLetter, "Cover_Letter")} className="px-4 py-2 bg-blue-500/20 text-blue-400 font-bold text-xs uppercase rounded-xl hover:bg-blue-500/30 transition flex items-center gap-1">
+                    <Download size={14} /> DOCX
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Replaced 'A' symbol with Logo image */}
+            <div className="relative mr-4 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-white/10">
+              <Image 
+                src="/logo.png" 
+                alt="Logo" 
+                width={120} 
+                height={120} 
+                className={`transition-transform duration-1000 ${generatingLetter ? "animate-pulse scale-110" : ""}`}
+              />
+              <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/20 to-transparent mix-blend-overlay"></div>
+            </div>
           </div>
-          <div className="relative hidden lg:block">
-            <div className="w-32 h-32 bg-blue-500/20 rounded-full blur-3xl absolute inset-0 animate-pulse" />
-            <Wand2 size={80} className="text-muted-text/30" strokeWidth={1} />
-          </div>
+          
+          {/* Cover Letter Output Preview */}
+          {coverLetter && (
+            <div className="mt-4 p-5 bg-black/40 border border-white/5 rounded-2xl max-h-[220px] overflow-y-auto custom-scrollbar relative z-10 text-xs text-white/70 leading-relaxed whitespace-pre-wrap">
+              {coverLetter}
+            </div>
+          )}
         </div>
 
-        {/* Quick Fix Block */}
-        <div className="bg-[#111827] border border-white/5 rounded-[40px] p-10 flex items-center justify-between">
-          <div className="space-y-4 max-w-sm">
-            <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
-              <FileEdit size={24} />
+        {/* Quick Fix Block / ATS Section Combine */}
+        <div className="bg-[#111827] border border-white/5 rounded-[40px] p-10 flex flex-col relative overflow-hidden group h-fit">
+          <div className="flex items-start justify-between gap-6 z-10 relative">
+            <div className="space-y-4 max-w-sm">
+              <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
+                <FileEdit size={24} />
+              </div>
+              <h3 className="text-2xl font-black text-white leading-tight">Quick Fix (ATS)</h3>
+              
+              {atsIssues.length > 0 && !fixedResume && (
+                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center text-red-400 font-bold text-xs gap-1.5 uppercase mb-2">
+                    <AlertOctagon size={14} /> We found {atsIssues.length} ATS issues
+                  </div>
+                  <ul className="list-disc pl-4 text-[11px] text-red-400/80 space-y-1">
+                    {atsIssues.map((issue, idx) => (
+                      <li key={idx}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {atsIssues.length === 0 && !fixedResume && (
+                  <p className="text-muted-text text-sm font-medium leading-relaxed">
+                    No critical formatting issues, but click below to heavily optimize your action verbs and phrasing for ATS parsing bots.
+                  </p>
+              )}
+
+              {!fixedResume ? (
+                <button 
+                  onClick={handleQuickFix}
+                  disabled={fixingResume}
+                  className="px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all disabled:opacity-50 flex items-center gap-2 mt-4"
+                >
+                  {fixingResume ? <Loader2 size={14} className="animate-spin" /> : "Repair Document"}
+                </button>
+              ) : (
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => exportToPDF(fixedResume, "ATS_Optimized_Resume")} className="px-4 py-2 bg-purple-500/20 text-purple-400 font-bold text-xs uppercase rounded-xl hover:bg-purple-500/30 transition flex items-center gap-1">
+                    <Download size={14} /> PDF
+                  </button>
+                  <button onClick={() => exportToDOCX(fixedResume, "ATS_Optimized_Resume")} className="px-4 py-2 bg-purple-500/20 text-purple-400 font-bold text-xs uppercase rounded-xl hover:bg-purple-500/30 transition flex items-center gap-1">
+                    <Download size={14} /> DOCX
+                  </button>
+                </div>
+              )}
             </div>
-            <h3 className="text-2xl font-black text-white leading-tight">Quick Fix</h3>
-            <p className="text-muted-text text-sm font-medium leading-relaxed">
-              We found formatting errors that might trip up legacy ATS systems. Click to auto-repair.
-            </p>
-            <button className="px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all">
-              Repair Document
-            </button>
           </div>
+          
+          {/* Quick Fix Output Preview — matches PDF layout exactly */}
+          {fixedResume && (
+            <div className="mt-6 flex flex-col gap-4 relative z-10 w-full">
+              <div className="flex flex-wrap gap-2">
+                {atsImprovements.map((imp, i) => (
+                  <span key={i} className="px-2 py-1 bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-400 font-bold uppercase rounded-md">
+                    {imp}
+                  </span>
+                ))}
+              </div>
+              
+              <div className="p-8 bg-white max-h-[550px] overflow-y-auto custom-scrollbar text-black shadow-lg mb-4" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
+                
+                {/* Header */}
+                {fixedResume.header && (
+                  <div className="text-center mb-4">
+                    <h2 className="text-2xl font-bold text-black tracking-tight" style={{ margin: 0 }}>{fixedResume.header.name}</h2>
+                    <p className="text-[11px] text-gray-700 mt-1">
+                      {fixedResume.header.contact?.items && Array.isArray(fixedResume.header.contact.items)
+                        ? fixedResume.header.contact.items.map((item: any, idx: number) => 
+                            renderContactItem(item, idx, fixedResume.header.contact.items.length)
+                          )
+                        : typeof fixedResume.header.contact === "string"
+                          ? fixedResume.header.contact
+                          : null
+                      }
+                    </p>
+                  </div>
+                )}
+                
+                {/* Summary */}
+                {fixedResume.summary && (
+                  <div className="mb-4">
+                    <h3 className="text-[14px] font-bold uppercase text-black mb-1 border-b-[1.5px] border-black pb-1">Professional Summary</h3>
+                    <p className="text-[12px] text-black leading-relaxed mt-2">{fixedResume.summary}</p>
+                  </div>
+                )}
+                
+                {/* Skills */}
+                {fixedResume.skills && Object.keys(fixedResume.skills).length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="text-[14px] font-bold uppercase text-black mb-1 border-b-[1.5px] border-black pb-1">Technical Skills</h3>
+                    <div className="mt-2 space-y-0.5">
+                      {Object.entries(fixedResume.skills).map(([category, skillsGroup]: [string, any]) => {
+                        const arr = Array.isArray(skillsGroup) ? skillsGroup : [];
+                        return (
+                          <p key={category} className="text-[12px] text-black" style={{ margin: 0 }}>
+                            <span className="font-bold">{category}: </span>
+                            {arr.join(", ")}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Projects & Experience */}
+                {fixedResume.projects && fixedResume.projects.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="text-[14px] font-bold uppercase text-black mb-1 border-b-[1.5px] border-black pb-1">Experience & Projects</h3>
+                    <div className="space-y-3 mt-2">
+                      {fixedResume.projects.map((proj: any, idx: number) => (
+                        <div key={idx}>
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <h4 className="text-[13px] font-bold text-black" style={{ margin: 0 }}>{proj.title || "Project"}</h4>
+                            {proj.techStack && (
+                              <span className="text-[11px] italic text-gray-500">[{proj.techStack}]</span>
+                            )}
+                          </div>
+                          {/* Project links */}
+                          {proj.links && Array.isArray(proj.links) && proj.links.length > 0 && (
+                            <p className="text-[11px] mt-0.5 mb-1">
+                              {proj.links.map((link: any, linkIdx: number) => (
+                                <span key={linkIdx}>
+                                  <span className="text-gray-600">{link.label}: </span>
+                                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{link.url}</a>
+                                  {linkIdx < proj.links.length - 1 && <span className="text-gray-400 mx-1">|</span>}
+                                </span>
+                              ))}
+                            </p>
+                          )}
+                          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+                            {Array.isArray(proj.description) && proj.description.map((desc: string, descIdx: number) => (
+                              <li key={descIdx} className="text-[12px] text-black leading-relaxed">{desc}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Education */}
+                {fixedResume.education && fixedResume.education.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="text-[14px] font-bold uppercase text-black mb-1 border-b-[1.5px] border-black pb-1">Education</h3>
+                    <div className="space-y-2 mt-2">
+                      {fixedResume.education.map((edu: any, idx: number) => (
+                        <div key={idx}>
+                          <div className="flex justify-between items-start">
+                            <h4 className="text-[13px] font-bold text-black" style={{ margin: 0 }}>{edu.institution}</h4>
+                            {edu.year && <span className="text-[12px] text-gray-600">{edu.year}</span>}
+                          </div>
+                          <p className="text-[12px] text-black" style={{ margin: 0 }}>{edu.degree}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
+
+      {/* History Modal */}
+      <HistoryModal
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        userId={user?.id || ""}
+        onView={handleHistoryView}
+        onReanalyze={handleHistoryReanalyze}
+      />
     </div>
   );
 }

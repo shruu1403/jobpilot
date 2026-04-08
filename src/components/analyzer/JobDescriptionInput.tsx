@@ -43,11 +43,12 @@ export function JobDescriptionInput({
         body: JSON.stringify({ url: jobUrl }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to fetch job description");
+        throw new Error(data.error || "Failed to fetch job description");
       }
 
-      const data = await response.json();
       if (data.text) {
         onChange(data.text);
         toast.success("Job description extracted!");
