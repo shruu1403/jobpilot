@@ -10,7 +10,6 @@ import {
   Briefcase, 
   Users, 
   Settings, 
-  Zap 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -84,19 +83,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom Section */}
-      <div className="p-6">
-        <div className="bg-slate-800/10 border border-white/5 rounded-2xl p-5 relative overflow-hidden group">
-          {/* Subtle decoration */}
-          <div className="absolute -right-4 -top-4 w-20 h-20 bg-accent-purple/10 rounded-full blur-2xl group-hover:bg-accent-purple/20 transition-colors duration-500" />
-          
-          <p className="text-muted-text text-xs mb-3 font-medium">Ready for more?</p>
-          <button className="w-full py-3 px-4 bg-gradient-to-r from-accent-blue to-accent-purple rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent-blue/20 hover:shadow-accent-blue/40 transform hover:-translate-y-0.5 transition-all duration-300">
-            <Zap size={16} fill="white" />
-            Upgrade to Pro
-          </button>
-        </div>
-      </div>
+
     </aside>
   );
 }

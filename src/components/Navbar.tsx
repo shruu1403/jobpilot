@@ -1,17 +1,26 @@
 "use client";
 
-import { Search as SearchIcon, Bell, User, LogOut } from "lucide-react";
+import { Search as SearchIcon, User, LogOut } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 export function Navbar() {
-  const { userName, loading, avatarUrl } = useUser();
+  const { userName, userRole, loading, avatarUrl } = useUser();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isResumePage = pathname === "/resumes";
+  const [searchValue, setSearchValue] = useState(searchParams.get("search") || "");
+
+
+  useEffect(() => {
+    setSearchValue(searchParams.get("search") || "");
+  }, [searchParams]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -33,10 +42,26 @@ export function Navbar() {
     }
   };
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchValue(value);
+    
+    // Update URL query param
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set("search", value);
+    } else {
+      params.delete("search");
+    }
+    
+    // Use replace to avoid filling up history
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
   return (
     <header className="h-[60px] sticky top-0 right-0 glass border-b border-sidebar-border z-40 px-8 flex items-center justify-between">
       {/* Search Section */}
-      <div className="flex-1 max-w-[400px]">
+      <div className={`flex-1 max-w-[400px] transition-all duration-500 ${isResumePage ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
         <div className="relative group">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-text group-focus-within:text-white transition-colors duration-200">
             <SearchIcon size={18} />
@@ -44,6 +69,8 @@ export function Navbar() {
           <input
             type="text"
             placeholder="Search resumes..."
+            value={searchValue}
+            onChange={handleSearchChange}
             className="w-full h-10 pl-11 pr-4 bg-input-bg border border-transparent rounded-full text-sm text-white placeholder:text-muted-text focus:outline-none focus:ring-2 focus:ring-accent-blue/30 focus:border-accent-blue/50 transition-all duration-300 shadow-inner"
           />
         </div>
@@ -51,11 +78,6 @@ export function Navbar() {
 
       {/* Right Section */}
       <div className="flex items-center gap-6">
-        {/* Notifications */}
-        <button className="relative p-2 text-muted-text hover:text-white transition-colors duration-200">
-          <Bell size={22} strokeWidth={1.5} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-accent-blue rounded-full ring-2 ring-background ring-offset-background animate-pulse" />
-        </button>
 
         {/* Divider */}
         <div className="w-[1px] h-6 bg-sidebar-border" />
@@ -70,6 +92,11 @@ export function Navbar() {
               <span className="text-[13px] font-semibold text-white leading-tight group-hover:text-accent-blue transition-colors">
                 {loading ? "..." : userName}
               </span>
+              {userRole && (
+                <span className="text-[10px] font-medium text-muted-text leading-tight mt-0.5">
+                  {userRole}
+                </span>
+              )}
             </div>
             
             <button className="p-1 rounded-full border-2 border-accent-blue/40 group-hover:border-accent-blue transition-colors duration-300 overflow-hidden">

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Navbar } from "@/components/Navbar";
 import { Toaster } from "react-hot-toast";
+import { Suspense } from "react";
 
 export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -28,11 +29,15 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
       {/* Main Content Area */}
       <main className="flex-1 ml-[260px] relative min-h-screen">
         {/* Top Navbar */}
-        <Navbar />
+        <Suspense fallback={<div className="h-[60px] border-b border-sidebar-border glass" />}>
+          <Navbar />
+        </Suspense>
 
         {/* Page Content */}
         <div className="p-8">
-          {children}
+          <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]">Loading...</div>}>
+            {children}
+          </Suspense>
         </div>
       </main>
       <Toaster position="top-right" />

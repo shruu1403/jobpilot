@@ -67,7 +67,7 @@ export function ResumeSelectModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
       />
@@ -79,7 +79,7 @@ export function ResumeSelectModal({
             <h3 className="text-2xl font-bold text-white">Select Resume</h3>
             <p className="text-muted-text text-sm mt-1">Pick a document from your library or upload a new one</p>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 hover:bg-white/5 rounded-full text-muted-text hover:text-white transition-colors"
           >
@@ -112,12 +112,12 @@ export function ResumeSelectModal({
                     <span className="text-muted-text text-[10px] uppercase font-black tracking-widest mt-1">Limit: 5MB</span>
                   </>
                 )}
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleModalUpload} 
-                  className="hidden" 
-                  accept=".pdf,.docx" 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleModalUpload}
+                  className="hidden"
+                  accept=".pdf,.docx"
                 />
               </button>
 
@@ -129,8 +129,8 @@ export function ResumeSelectModal({
                     onClick={() => onSelect(resume)}
                     className={`
                       group relative flex flex-col p-5 rounded-2xl border transition-all duration-300 text-left min-h-[160px]
-                      ${isSelected 
-                        ? 'bg-blue-500/10 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.15)] pointer-events-none' 
+                      ${isSelected
+                        ? 'bg-blue-500/10 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.15)] pointer-events-none'
                         : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/10 active:scale-[0.98]'
                       }
                     `}
@@ -143,15 +143,15 @@ export function ResumeSelectModal({
                         <CheckCircle2 size={20} className="text-blue-400" />
                       )}
                     </div>
-                    
+
                     <h4 className="text-white font-bold text-[15px] group-hover:text-blue-400 transition-colors line-clamp-1 mb-1">
                       {resume.file_name}
                     </h4>
-                    
+
                     <div className="flex items-center gap-2 text-muted-text text-xs font-medium">
                       <Calendar size={12} />
-                      {new Date(resume.created_at).toLocaleDateString('en-US', { 
-                        month: 'short', day: 'numeric', year: 'numeric' 
+                      {new Date(resume.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric'
                       })}
                     </div>
                   </button>

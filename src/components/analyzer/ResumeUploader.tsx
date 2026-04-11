@@ -66,7 +66,7 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
             ) : (
               <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-500">
                 <div className="mb-6 p-5 bg-white/[0.03] rounded-3xl border border-white/5 shadow-xl group-hover:scale-110 group-hover:border-blue-500/20 transition-all duration-500">
-                  <UploadCloud size={42} className="text-blue-500" />
+                  <UploadCloud size={36} className="text-blue-500" />
                 </div>
                 
                 <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Drop your resume here</h3>

@@ -27,7 +27,7 @@ export function ResumeCard({ resume, onDelete, onStatusChange }: ResumeCardProps
   };
 
   const handleAnalyze = () => {
-    router.push("/analyzer");
+    router.push(`/analyzer?resumeId=${resume.id}`);
   };
 
   const handleStatusChange = async (newStatus: ResumeStatus) => {
