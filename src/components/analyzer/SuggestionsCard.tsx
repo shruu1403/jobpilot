@@ -18,7 +18,7 @@ export function SuggestionsCard({ suggestions, active }: SuggestionsCardProps) {
       transition={{ delay: 0.4 }}
       className={`
         bg-[#111827] border border-white/5 rounded-[32px] p-8 space-y-6 transition-all duration-700
-        ${hasSuggestions ? "opacity-100" : "opacity-30 grayscale blur-[2px] pointer-events-none"}
+        ${hasSuggestions ? "opacity-100" : "opacity-30 grayscale blur-[1px] pointer-events-none"}
       `}
     >
       <div className="flex items-center justify-between">

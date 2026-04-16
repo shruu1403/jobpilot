@@ -49,8 +49,23 @@ export default function ResumeLibrary() {
     }
   };
 
+  const showLoginToast = () => {
+    toast('Sign in to save resumes to your library', {
+      icon: '🔒',
+      duration: 6000,
+      style: {
+        background: '#1e293b',
+        color: '#fff',
+        border: '1px solid rgba(59,130,246,0.3)',
+      },
+    });
+  };
+
   const handleUpload = async (file: File) => {
-    if (!user) return;
+    if (!user) {
+      showLoginToast();
+      return;
+    }
 
     if (resumes.length >= MAX_RESUMES) {
       toast.error(`You have reached the limit of ${MAX_RESUMES} resumes.`);
@@ -98,57 +113,55 @@ export default function ResumeLibrary() {
     );
   }
 
-  if (!user && !authLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-        <div className="p-4 bg-red-500/10 rounded-full mb-6 border border-red-500/20">
-          <FileText className="w-10 h-10 text-red-400" />
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-        <p className="text-muted-text max-w-md">Please log in to manage clinical data and access your resume library.</p>
-        <button
-          onClick={() => window.location.href = '/login'}
-          className="mt-6 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all font-semibold shadow-lg shadow-blue-600/20"
-        >
-          Go to login
-        </button>
-      </div>
-    );
-  }
+  const isAuthenticated = !!user;
 
   return (
     <div className="max-w-[1400px] mx-auto animate-in fade-in duration-700">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-        <div className="space-y-2">
-          <span className="text-[11px] font-bold text-blue-400 uppercase tracking-[0.2em] bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
-            Management Suite
-          </span>
-          <h1 className="text-3xl font-black text-white tracking-tight">Resume Library</h1>
-          <p className="text-muted-text max-w-[500px] leading-relaxed text-md">
-            Manage your professional documents with JobPilot's AI-driven organization.
-            Analyze, refine, and store multiple versions for targeted applications.
-          </p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 -mt-2">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full w-fit">
+            <span className="text-[11px] font-bold text-blue-400 uppercase tracking-[0.2em]">
+              Management Suite
+            </span>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-black text-white tracking-tight">Resume Library</h1>
+            <p className="text-muted-text max-w-[500px] leading-relaxed text-md">
+              Manage your professional documents with JobPilot's AI-driven organization.
+              Analyze, refine, and store multiple versions for targeted applications.
+            </p>
+          </div>
         </div>
 
         {/* Global Upload Button */}
-        <label className={`
-          relative flex items-center gap-3 px-8 py-3.5 rounded-2xl cursor-pointer
-          bg-gradient-to-br from-blue-600 to-indigo-600
-          text-white font-bold transition-all duration-300
-          hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(37,99,235,0.4)]
-          ${uploading || resumes.length >= MAX_RESUMES ? 'opacity-50 cursor-not-allowed grayscale' : 'active:scale-[0.98]'}
-        `}>
-          {uploading ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
-          <span>{uploading ? 'Uploading...' : 'Upload Resume'}</span>
-          <input
-            type="file"
-            className="hidden"
-            accept=".pdf,.docx"
-            disabled={uploading || resumes.length >= MAX_RESUMES}
-            onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
-          />
-        </label>
+        {isAuthenticated ? (
+          <label className={`
+            relative flex items-center gap-3 px-8 py-3.5 rounded-2xl cursor-pointer
+            bg-gradient-to-br from-blue-600 to-indigo-600
+            text-white font-bold transition-all duration-300
+            hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(37,99,235,0.4)]
+            ${uploading || resumes.length >= MAX_RESUMES ? 'opacity-50 cursor-not-allowed grayscale' : 'active:scale-[0.98]'}
+          `}>
+            {uploading ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
+            <span>{uploading ? 'Uploading...' : 'Upload Resume'}</span>
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.docx"
+              disabled={uploading || resumes.length >= MAX_RESUMES}
+              onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+            />
+          </label>
+        ) : (
+          <button
+            onClick={showLoginToast}
+            className="flex items-center gap-3 px-8 py-3.5 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-[0.98]"
+          >
+            <Upload size={20} />
+            <span>Upload Resume</span>
+          </button>
+        )}
       </div>
 
       {/* Stats / Limit Indicator */}
@@ -168,16 +181,41 @@ export default function ResumeLibrary() {
       {/* Grid Section */}
       {filteredResumes.length === 0 && !loading ? (
         <div className="bg-[#1E293B]/30 rounded-2xl border-2 border-dashed border-white/5 p-20 text-center flex flex-col items-center justify-center">
-          <div className="w-17 h-17 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
-            <Plus size={25} className="text-blue-400" />
-          </div>
-          <h2 className="text-1.5xl font-bold text-white mb-2">{searchTerm ? 'No matches found' : 'No resumes found'}</h2>
-          <p className="text-muted-text mb-8 max-w-sm">
-            {searchTerm
-              ? `We couldn't find any resumes matching "${searchTerm}". Try a different term or clear the search.`
-              : 'Ready to level up your career? Upload your first resume to get AI-driven analysis started.'}
-          </p>
-          {!searchTerm && <AddResumeCard onFileSelect={handleUpload} />}
+          {searchTerm ? (
+            <>
+              <div className="w-17 h-17 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
+                <Plus size={25} className="text-blue-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">No matches found</h2>
+              <p className="text-muted-text max-w-sm">
+                {`We couldn't find any resumes matching "${searchTerm}". Try a different term or clear the search.`}
+              </p>
+            </>
+          ) : isAuthenticated ? (
+            <>
+              <h2 className="text-xl font-bold text-white mb-2">No resumes found</h2>
+              <p className="text-muted-text mb-8 max-w-sm">
+                Ready to level up your career? Upload your first resume to get AI-driven analysis started.
+              </p>
+              <AddResumeCard onFileSelect={handleUpload} />
+            </>
+          ) : (
+            <>
+              <div className="w-17 h-17 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
+                <FileText size={25} className="text-blue-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Your library is empty</h2>
+              <p className="text-muted-text mb-6 max-w-sm">
+                Sign in to upload, organize, and manage your resumes with AI-powered insights.
+              </p>
+              <button
+                onClick={() => window.location.href = '/signup'}
+                className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all"
+              >
+                Sign up to get started
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

@@ -10,7 +10,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   
   // Define routes that should NOT have the Sidebar and Navbar
-  const isAuthPage = pathname === "/login" || pathname === "/signup" || pathname === "/reset-password";
+  const isAuthPage = pathname === "/" || pathname === "/login" || pathname === "/signup" || pathname === "/reset-password";
 
   if (isAuthPage) {
     return (

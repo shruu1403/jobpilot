@@ -44,7 +44,7 @@ export default function DeleteAccountModal({ userId }: DeleteAccountModalProps) 
       await supabase.auth.signOut();
 
       toast.success("Account data deleted successfully");
-      router.push("/login");
+      router.replace("/");
     } catch (err: any) {
       toast.error("Failed to delete account: " + err.message);
     } finally {

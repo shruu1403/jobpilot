@@ -504,7 +504,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                     type="text"
                     value={tags}
                     onChange={(e) => setTags(e.target.value)}
-                    placeholder="Full-time, Urgent"
+                    placeholder="e.g. Full-time, Urgent"
                     className="w-full bg-[#1E2538] border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-blue/50"
                   />
                 </div>

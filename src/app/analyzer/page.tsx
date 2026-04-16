@@ -31,7 +31,7 @@ import { exportToPDF, exportToDOCX } from "@/lib/exportUtils";
 const DAILY_LIMIT = 5;
 
 export default function AnalyzerPage() {
-  const { user } = useUser();
+  const { user, loading: authLoading } = useUser();
   const searchParams = useSearchParams();
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -39,6 +39,9 @@ export default function AnalyzerPage() {
 
   // Raw extracted resume text (needed for secondary actions)
   const [rawResumeText, setRawResumeText] = useState("");
+
+  // Guest-mode: raw File object for direct text extraction (no Supabase)
+  const [guestFile, setGuestFile] = useState<File | null>(null);
 
   // Primary Analysis results
   const [matchScore, setMatchScore] = useState(0);
@@ -69,9 +72,14 @@ export default function AnalyzerPage() {
   // Auto-selection flag
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
+  const isAuthenticated = !!user;
+
   const handleResumeChange = (resume: Resume | null) => {
     setSelectedResume(resume);
-    if (!resume) resetResults();
+    if (!resume) {
+      resetResults();
+      setGuestFile(null);
+    }
   };
 
   const resetResults = () => {
@@ -148,29 +156,53 @@ export default function AnalyzerPage() {
       setFixedResume(null);
       setAnalysisComplete(false);
 
-      // Extract File
-      const { data: fileData, error: downloadError } = await supabase.storage
-        .from("resumes")
-        .download(selectedResume.file_path);
+      let resumeText = "";
 
-      if (downloadError) throw new Error("Failed to download resume file.");
+      if (!isAuthenticated && guestFile) {
+        // Guest mode: extract text directly from the local File object
+        const formData = new FormData();
+        formData.append("file", guestFile);
 
-      const formData = new FormData();
-      formData.append("file", fileData);
+        const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
 
-      const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
+        const contentType = extractRes.headers.get("content-type");
+        let extractData;
+        if (contentType && contentType.includes("application/json")) {
+          extractData = await extractRes.json();
+        } else {
+          const textError = await extractRes.text();
+          throw new Error(`Text extraction failed: ${textError}`);
+        }
 
-      const contentType = extractRes.headers.get("content-type");
-      let extractData;
-      if (contentType && contentType.includes("application/json")) {
-        extractData = await extractRes.json();
+        const { text, error: extractErr } = extractData;
+        if (extractErr) throw new Error(extractErr);
+        resumeText = text;
       } else {
-        const textError = await extractRes.text();
-        throw new Error(`Text extraction failed: ${textError}`);
-      }
+        // Authenticated mode: download from Supabase storage
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from("resumes")
+          .download(selectedResume.file_path);
 
-      const { text: resumeText, error: extractErr } = extractData;
-      if (extractErr) throw new Error(extractErr);
+        if (downloadError) throw new Error("Failed to download resume file.");
+
+        const formData = new FormData();
+        formData.append("file", fileData);
+
+        const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
+
+        const contentType = extractRes.headers.get("content-type");
+        let extractData;
+        if (contentType && contentType.includes("application/json")) {
+          extractData = await extractRes.json();
+        } else {
+          const textError = await extractRes.text();
+          throw new Error(`Text extraction failed: ${textError}`);
+        }
+
+        const { text, error: extractErr } = extractData;
+        if (extractErr) throw new Error(extractErr);
+        resumeText = text;
+      }
 
       setRawResumeText(resumeText); // Save for quick-fix/cover letter
 
@@ -195,21 +227,18 @@ export default function AnalyzerPage() {
         incrementQuota();
         toast.success("Analysis complete");
 
-        // Auto-save analysis to Supabase
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        console.log("[History] Current user at save time:", currentUser?.id || "NOT FOUND");
-        if (currentUser?.id) {
+        // Auto-save analysis to Supabase (only for authenticated users)
+        console.log("[History] Current user at save time:", user?.id || "NOT FOUND");
+        if (user?.id) {
           const payload = {
-            user_id: currentUser.id,
+            user_id: user.id,
             resume_name: selectedResume.file_name,
-            job_title: extractJobTitle(jobDescription),
-            company: extractCompany(jobDescription),
+            job_title: data.jobTitle || extractJobTitle(jobDescription),
+            company: (data.company && data.company !== "Unknown Company") ? data.company : extractCompany(jobDescription),
             job_description: jobDescription,
             match_score: data.matchScore,
             skill_gaps: data.skillGaps || [],
             suggestions: data.suggestions || [],
-            // Note: ats_issues, reason, tags, and resume_id are omitted 
-            // since they don't exist in the current Supabase schema.
           };
           console.log("[History] Saving analysis:", payload);
           const { error: insertError } = await supabase.from("analyses").insert(payload);
@@ -218,9 +247,17 @@ export default function AnalyzerPage() {
             toast.error("Failed to save to history: " + insertError.message);
           } else {
             console.log("[History] Analysis saved successfully");
+            import("@/services/activityLogs").then(({ logActivity }) => {
+              logActivity(
+                user.id,
+                'analysis',
+                'Analyzed Resume',
+                selectedResume.file_name
+              );
+            });
           }
         } else {
-          console.warn("[History] No user ID — skipping save");
+          console.warn("[History] Guest user — analysis not saved to history");
         }
       } else {
         throw new Error(data.error || "Analysis failed");
@@ -388,13 +425,25 @@ export default function AnalyzerPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-4 justify-end">
-          <button
-            onClick={() => setHistoryOpen(true)}
-            className="px-6 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white font-bold text-sm transition-all flex items-center gap-3 group hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/20 whitespace-nowrap"
-          >
-            <HistoryIcon size={18} className="group-hover:rotate-[-15deg] transition-transform" />
-            <span>View History</span>
-          </button>
+          {/* History Button — disabled for guest users */}
+          {isAuthenticated ? (
+            <button
+              onClick={() => setHistoryOpen(true)}
+              className="px-6 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white font-bold text-sm transition-all flex items-center gap-3 group hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/20 whitespace-nowrap"
+            >
+              <HistoryIcon size={18} className="group-hover:rotate-[-15deg] transition-transform" />
+              <span>View History</span>
+            </button>
+          ) : (
+            <button
+              disabled
+              className="px-6 py-3.5 bg-white/[0.02] border border-white/5 rounded-2xl text-white/20 font-bold text-sm flex items-center gap-3 cursor-not-allowed whitespace-nowrap"
+              title="Sign in to access your analysis history"
+            >
+              <Lock size={16} className="text-white/20" />
+              <span>View History</span>
+            </button>
+          )}
           <div className="px-5 py-3.5 bg-white/[0.03] border border-white/5 rounded-2xl text-muted-text text-sm font-bold flex items-center gap-2 whitespace-nowrap">
             <span className="text-blue-400 font-black">{dailyAnalyses} / {DAILY_LIMIT}</span>
             <span className="text-white/20 text-xs ml-0.5">today</span>
@@ -438,13 +487,13 @@ export default function AnalyzerPage() {
               <span className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[10px] font-black text-blue-400 uppercase">01</span>
               <h3 className="text-xs font-black text-muted-text uppercase tracking-widest leading-none">Master Talent Profile</h3>
             </div>
-            {user?.id && (
-              <ResumeUploader
-                userId={user.id}
-                selectedResume={selectedResume}
-                onSelect={handleResumeChange}
-              />
-            )}
+            <ResumeUploader
+              userId={user?.id || "guest"}
+              selectedResume={selectedResume}
+              onSelect={handleResumeChange}
+              isAuthenticated={isAuthenticated}
+              onGuestFileSelect={setGuestFile}
+            />
           </div>
           <div className="space-y-4">
             <JobDescriptionInput
@@ -465,7 +514,7 @@ export default function AnalyzerPage() {
       </div>
 
       {/* NEW: Secondary Features Section (Visible after Analyze) */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-white/5 transition-all duration-1000 ${analysisComplete ? "opacity-100" : "opacity-30 grayscale blur-[2px] pointer-events-none"}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-white/5 transition-all duration-1000 ${analysisComplete ? "opacity-100" : "opacity-30 grayscale blur-[1px] pointer-events-none"}`}>
 
         {/* Cover Letter Block */}
         <div className="bg-gradient-to-br from-[#111827] to-[#0B1220] border border-white/5 rounded-[40px] p-10 flex flex-col justify-start gap-6 relative overflow-hidden group h-fit">
@@ -681,14 +730,16 @@ export default function AnalyzerPage() {
 
       </div>
 
-      {/* History Modal */}
-      <HistoryModal
-        isOpen={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        userId={user?.id || ""}
-        onView={handleHistoryView}
-        onReanalyze={handleHistoryReanalyze}
-      />
+      {/* History Modal — only rendered for authenticated users */}
+      {isAuthenticated && (
+        <HistoryModal
+          isOpen={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          userId={user?.id || ""}
+          onView={handleHistoryView}
+          onReanalyze={handleHistoryReanalyze}
+        />
+      )}
     </div>
   );
 }

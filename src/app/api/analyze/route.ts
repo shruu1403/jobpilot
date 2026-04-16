@@ -80,6 +80,8 @@ Evaluate based on:
 Return ONLY valid JSON:
 
 {
+  "jobTitle": "extracted job title",
+  "company": "extracted company name (or 'Unknown Company')",
   "matchScore": number (0-100),
   "reason": "short explanation",
   "skillGaps": ["skill1", "skill2", "skill3"],
@@ -97,6 +99,7 @@ Rules:
 - No extra text
 - Strict JSON only
 - Keep output concise
+- suggestions should contain exactly 2 highly actionable tips
 - atsIssues should list specific ATS problems like missing keywords, weak action verbs, improper formatting, lack of measurable achievements`;
 
     // 4. Call Gemini (single call)
@@ -116,6 +119,8 @@ Rules:
         skillGaps: Array.isArray(analysis.skillGaps) ? analysis.skillGaps : [],
         suggestions: Array.isArray(analysis.suggestions) ? analysis.suggestions : [],
         atsIssues: Array.isArray(analysis.atsIssues) ? analysis.atsIssues : [],
+        jobTitle: analysis.jobTitle || "",
+        company: analysis.company || "",
       });
     } catch (parseError) {
       console.error("[Analyze] JSON Parse Error. Raw response:", text);

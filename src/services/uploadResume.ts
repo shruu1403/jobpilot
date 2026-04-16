@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Resume, ResumeStatus } from '@/types/resume';
+import { logActivity } from '@/services/activityLogs';
 
 export const uploadResume = async (
   userId: string, 
@@ -68,6 +69,14 @@ export const uploadResume = async (
     console.error('Error saving metadata:', insertError);
     throw insertError;
   }
+
+  // Log activity
+  await logActivity(
+    userId,
+    'resume',
+    'Uploaded Resume',
+    file.name
+  );
 
   return data;
 };

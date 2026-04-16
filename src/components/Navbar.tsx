@@ -1,6 +1,7 @@
 "use client";
 
-import { Search as SearchIcon, User, LogOut } from "lucide-react";
+import { Search as SearchIcon, User, LogOut, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useUser } from "@/hooks/useUser";
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -8,7 +9,8 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 export function Navbar() {
-  const { userName, userRole, loading, avatarUrl } = useUser();
+  const { user, userName, userRole, loading, avatarUrl } = useUser();
+  const isAuthenticated = !!user;
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -38,7 +40,7 @@ export function Navbar() {
       toast.error("Logout failed!");
     } else {
       toast.success("Successfully logged out");
-      router.push("/login");
+      router.replace("/");
     }
   };
 
@@ -79,6 +81,17 @@ export function Navbar() {
       {/* Right Section */}
       <div className="flex items-center gap-6">
 
+        {/* Sign Up button — only for unauthenticated users */}
+        {!loading && !isAuthenticated && (
+          <Link
+            href="/signup"
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 shadow-[0_0_16px_rgba(37,99,235,0.3)] transition-all"
+          >
+            <UserPlus size={15} />
+            Sign Up
+          </Link>
+        )}
+
         {/* Divider */}
         <div className="w-[1px] h-6 bg-sidebar-border" />
 
@@ -113,10 +126,10 @@ export function Navbar() {
           {/* Logout Dropdown */}
           {showDropdown && (
             <div className="absolute top-full right-0 mt-3 w-48 bg-[#111827] border border-white/5 rounded-2xl shadow-2xl z-50 p-2 overflow-hidden animate-in fade-in zoom-in duration-200">
-              <div className="px-4 py-3 border-b border-white/5 mb-1">
+              {/* <div className="px-4 py-3 border-b border-white/5 mb-1">
                 <p className="text-[10px] font-black text-muted-text uppercase tracking-widest leading-none mb-1">Account Info</p>
                 <p className="text-xs font-bold text-white line-clamp-1">{userName}</p>
-              </div>
+              </div> */}
               
               <button 
                 onClick={handleLogout}

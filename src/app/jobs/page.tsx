@@ -6,8 +6,12 @@ import { Search } from "lucide-react";
 import { InsightsPanel } from "@/components/jobs/InsightsPanel";
 import { AddJobModal } from "@/components/jobs/AddJobModal";
 import { useJobStore } from "@/store/useJobStore";
+import { useUser } from "@/hooks/useUser";
+import toast from "react-hot-toast";
 
 export default function JobTrackerPage() {
+  const { user } = useUser();
+  const isAuthenticated = !!user;
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -17,6 +21,22 @@ export default function JobTrackerPage() {
   useEffect(() => {
     fetchJobs();
   }, [fetchJobs]);
+
+  const handleAddClick = () => {
+    if (!isAuthenticated) {
+      toast('Sign up to start tracking your job applications', {
+        icon: '🔒',
+        duration: 6000,
+        style: {
+          background: '#1e293b',
+          color: '#fff',
+          border: '1px solid rgba(59,130,246,0.3)',
+        },
+      });
+      return;
+    }
+    setIsAddModalOpen(true);
+  };
 
   return (
 
@@ -96,7 +116,7 @@ export default function JobTrackerPage() {
 
       {/* Floating Add Button */}
       <button
-        onClick={() => setIsAddModalOpen(true)}
+        onClick={handleAddClick}
         className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-accent-blue hover:bg-[#8B7FF9] text-white shadow-[0_0_20px_rgba(108,99,255,0.4)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-300 z-50 border-2 border-white/10"
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -105,11 +125,13 @@ export default function JobTrackerPage() {
         </svg>
       </button>
 
-      {/* Add Job Modal */}
-      <AddJobModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-      />
+      {/* Add Job Modal — only for authenticated users */}
+      {isAuthenticated && (
+        <AddJobModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+        />
+      )}
     </div>
 
   );

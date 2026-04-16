@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Job, JobStatus } from '../types/job';
 import { supabase } from '@/lib/supabaseClient';
 import toast from 'react-hot-toast';
+import { logActivity } from '@/services/activityLogs';
 
 interface JobStore {
   jobs: Job[];
@@ -88,6 +89,14 @@ export const useJobStore = create<JobStore>((set, get) => ({
         set((state) => ({ jobs: state.jobs.filter(j => j.id !== job.id) }));
         throw error;
       }
+
+      // Log activity
+      await logActivity(
+        user.id,
+        'job',
+        `Applied: ${job.title}`,
+        `At ${job.company}`
+      );
     } catch (err: any) {
       toast.error('Failed to save job: ' + err.message);
     }

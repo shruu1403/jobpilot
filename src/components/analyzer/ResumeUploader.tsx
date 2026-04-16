@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2, RefreshCw, Trash2, Library } from "lucide-react";
+import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2, RefreshCw, Trash2, Library, Lock } from "lucide-react";
 import { Resume } from "@/types/resume";
 import { uploadResume } from "@/services/uploadResume";
 import { ResumeSelectModal } from "./ResumeSelectModal";
@@ -11,9 +11,12 @@ interface ResumeUploaderProps {
   userId: string;
   onSelect: (resume: Resume | null) => void;
   selectedResume: Resume | null;
+  isAuthenticated?: boolean;
+  /** Called with the raw File when an unauth user picks a file (so the parent can extract text directly) */
+  onGuestFileSelect?: (file: File | null) => void;
 }
 
-export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploaderProps) {
+export function ResumeUploader({ userId, onSelect, selectedResume, isAuthenticated = true, onGuestFileSelect }: ResumeUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +24,38 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate file type
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Invalid file type. Only PDF and DOCX are allowed.");
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size exceeds 5 MB limit.");
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (!isAuthenticated) {
+      // Guest mode: create a temporary Resume object (no Supabase upload)
+      const tempResume: Resume = {
+        id: `guest_${Date.now()}`,
+        user_id: "guest",
+        file_name: file.name,
+        file_path: "", // not used for guests
+        created_at: new Date().toISOString(),
+        status: "ACTIVE",
+      };
+      onSelect(tempResume);
+      onGuestFileSelect?.(file);
+      toast.success("Resume loaded successfully!");
+      return;
+    }
 
     try {
       setUploading(true);
@@ -37,6 +72,7 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
 
   const handleRemove = () => {
     onSelect(null);
+    onGuestFileSelect?.(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -45,7 +81,7 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
       {!selectedResume ? (
         <div className="relative group">
           {/* Main Drop Card */}
-          <div 
+          <div
             className={`
               relative w-full aspect-[16/9] md:aspect-[21/9] bg-[#111827] border-2 border-dashed rounded-[32px] 
               flex flex-col items-center justify-center p-8 transition-all duration-500
@@ -68,10 +104,10 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
                 <div className="mb-6 p-5 bg-white/[0.03] rounded-3xl border border-white/5 shadow-xl group-hover:scale-110 group-hover:border-blue-500/20 transition-all duration-500">
                   <UploadCloud size={36} className="text-blue-500" />
                 </div>
-                
+
                 <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Drop your resume here</h3>
                 <p className="max-w-xs text-muted-text text-[13px] font-medium leading-relaxed mb-8">
-                  Supported formats: <span className="text-white">PDF, DOCX (Max 5MB)</span>. <br/>
+                  Supported formats: <span className="text-white">PDF, DOCX (Max 5MB)</span>. <br />
                   AI will extract text automatically.
                 </p>
 
@@ -82,18 +118,30 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
                   >
                     Select Files
                   </button>
-                  
-                  <button 
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 text-[11px] font-black text-muted-text uppercase tracking-widest hover:text-white transition-colors"
-                  >
-                    <Library size={14} />
-                    Or choose from your library
-                  </button>
+
+                  {isAuthenticated ? (
+                    <button
+                      onClick={() => setShowModal(true)}
+                      className="flex items-center gap-2 text-[11px] font-black text-muted-text uppercase tracking-widest hover:text-white transition-colors"
+                    >
+                      <Library size={14} />
+                      Or choose from your library
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="flex items-center gap-2 text-[11px] font-black text-white/20 uppercase tracking-widest cursor-not-allowed"
+                      title="Sign in to access your resume library"
+                    >
+                      <Lock size={12} className="text-white/20" />
+                      <Library size={14} />
+                      Library requires sign in
+                    </button>
+                  )}
                 </div>
               </div>
             )}
-            
+
             <input
               type="file"
               ref={fileInputRef}
@@ -131,19 +179,21 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
               </div>
               <h4 className="text-xl font-bold text-white mb-1 line-clamp-1">{selectedResume.file_name}</h4>
               <p className="text-muted-text text-sm font-medium">
-                Uploaded {new Date(selectedResume.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {!isAuthenticated ? "Guest upload — not saved to library" : `Uploaded ${new Date(selectedResume.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
               </p>
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => setShowModal(true)}
-                className="p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white transition-all group/change"
-                title="Change Resume"
-              >
-                <RefreshCw size={20} className="group-hover/change:rotate-180 transition-transform duration-500" />
-              </button>
+              {isAuthenticated && (
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white transition-all group/change"
+                  title="Change Resume"
+                >
+                  <RefreshCw size={20} className="group-hover/change:rotate-180 transition-transform duration-500" />
+                </button>
+              )}
               <button
                 onClick={handleRemove}
                 className="p-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-2xl text-red-500/70 hover:text-red-500 transition-all group/remove"
@@ -156,18 +206,20 @@ export function ResumeUploader({ userId, onSelect, selectedResume }: ResumeUploa
         </div>
       )}
 
-      {/* Select Modal */}
-      <ResumeSelectModal
-        userId={userId}
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        selectedId={selectedResume?.id}
-        onSelect={(resume) => {
-          onSelect(resume);
-          setShowModal(false);
-          toast.success("Resume selected successfully");
-        }}
-      />
+      {/* Select Modal — only for authenticated users */}
+      {isAuthenticated && (
+        <ResumeSelectModal
+          userId={userId}
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          selectedId={selectedResume?.id}
+          onSelect={(resume) => {
+            onSelect(resume);
+            setShowModal(false);
+            toast.success("Resume selected successfully");
+          }}
+        />
+      )}
     </div>
   );
 }

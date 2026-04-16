@@ -159,7 +159,7 @@ export function ReferralForm({
   // Auto-generate "Why this company" when core info is present
   useEffect(() => {
     const shouldSuggest = values.jobRole && values.company && !values.whyCompany && !isSuggesting;
-    
+
     if (shouldSuggest) {
       const suggest = async () => {
         try {
@@ -178,7 +178,7 @@ export function ReferralForm({
           setIsSuggesting(false);
         }
       };
-      
+
       const timer = setTimeout(suggest, 1000); // 1s debounce
       return () => clearTimeout(timer);
     }

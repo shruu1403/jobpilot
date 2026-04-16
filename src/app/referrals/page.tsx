@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useState } from "react";
+import { startTransition, useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { ReferralForm } from "@/components/referrals/ReferralForm";
 import { OutputPanel } from "@/components/referrals/OutputPanel";
@@ -11,6 +11,8 @@ import { Sparkles } from "lucide-react";
 import { ResumeSelectModal } from "@/components/analyzer/ResumeSelectModal";
 import type { ReferralFormValues, ReferralResponse } from "@/types/referral";
 import type { Resume } from "@/types/resume";
+
+const DAILY_LIMIT = 15;
 
 const initialValues: ReferralFormValues = {
   jobRole: "",
@@ -40,19 +42,63 @@ export default function ReferralsPage() {
   const [advancedOpen, setAdvancedOpen] = useState(true);
   const [variationSeed, setVariationSeed] = useState(0);
   const [selectModalOpen, setSelectModalOpen] = useState(false);
-  
+
   // New States for Intelligence
   const [resumeText, setResumeText] = useState("");
   const [isAutofilled, setIsAutofilled] = useState(false);
+
+  // Stats Tracker
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [fetchingUsage, setFetchingUsage] = useState(true);
+
+  // Fetch today's usage from Supabase or LocalStorage
+  const fetchUsage = async () => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+
+      if (user) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const { count, error } = await supabase
+          .from("referrals")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", todayStart.toISOString())
+          .lte("created_at", todayEnd.toISOString());
+
+        if (error) throw error;
+        setUsageCount(count || 0);
+      } else {
+        const storedData = localStorage.getItem("jobpilot_referral_quota_guest");
+        if (storedData) {
+          const { date, count } = JSON.parse(storedData);
+          setUsageCount(date === today ? count : 0);
+        } else {
+          setUsageCount(0);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch referral usage:", err);
+    } finally {
+      setFetchingUsage(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsage();
+  }, [user]);
 
   const updateField = <K extends keyof ReferralFormValues>(
     field: K,
     value: ReferralFormValues[K]
   ) => {
     setFormValues((current) => ({ ...current, [field]: value }));
-    // If they manually edit background or skills, we could clear the tag, 
-    // but maybe better to keep it if they started with AI.
   };
+
+  const hasHitLimit = usageCount >= DAILY_LIMIT;
 
   const generateDrafts = async (nextVariation = variationSeed) => {
     if (!formValues.jobRole.trim() || !formValues.company.trim()) {
@@ -81,6 +127,37 @@ export default function ReferralsPage() {
         setResult(data);
       });
 
+      // Insert record to track usage
+      if (user) {
+        await supabase.from("referrals").insert({
+          user_id: user.id,
+          job_role: formValues.jobRole,
+          company: formValues.company,
+          created_at: new Date().toISOString()
+        });
+
+        import("@/services/activityLogs").then(({ logActivity }) => {
+          logActivity(
+            user.id,
+            'referral',
+            'Requested Referral',
+            `For ${formValues.company}`
+          );
+        });
+      }
+
+      setUsageCount((prev) => {
+        const newCount = prev + 1;
+        if (!user) {
+          const today = new Date().toISOString().split("T")[0];
+          localStorage.setItem(
+            "jobpilot_referral_quota_guest",
+            JSON.stringify({ date: today, count: newCount })
+          );
+        }
+        return newCount;
+      });
+
       toast.success("Referral drafts generated");
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Generation failed"));
@@ -102,7 +179,15 @@ export default function ReferralsPage() {
 
   const handleUseResume = () => {
     if (!user?.id) {
-      toast.error("Sign in to select your resume.");
+      toast('Sign in to pull your info from a library resume', {
+        icon: '🔒',
+        duration: 6000,
+        style: {
+          background: '#1e293b',
+          color: '#fff',
+          border: '1px solid rgba(59,130,246,0.3)',
+        },
+      });
       return;
     }
     setSelectModalOpen(true);
@@ -123,7 +208,7 @@ export default function ReferralsPage() {
 
       const formData = new FormData();
       formData.append("file", fileBlob, resume.file_name);
-      
+
       // Pass current job info for context-aware extraction
       if (formValues.jobRole) formData.append("jobRole", formValues.jobRole);
       if (formValues.company) formData.append("company", formValues.company);
@@ -182,17 +267,45 @@ export default function ReferralsPage() {
   ].filter(Boolean);
 
   return (
-    <div className="relative min-h-[calc(100vh-120px)] overflow-hidden px-4 md:px-8 pb-12">
+    <div className="relative min-h-[calc(100vh-120px)] overflow-hidden px-4 md:px-6 pb-12">
       <div className="pointer-events-none absolute inset-0 bg-[#0B1220]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.08),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.06),transparent_40%)]" />
 
       {/* Top Header Section — Full Width */}
-      <div className="relative mb-12 flex flex-col items-center justify-center text-center space-y-4 pt-10">
+      <div className="relative mb-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pt-4">
+        <div className="space-y-3">
+          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">Referral Generator</h1>
+          <p className="max-w-xl text-base md:text-md leading-relaxed text-slate-400">
+            Craft thoughtful, company-specific outreach that looks like it came from an insider, not a bot.
+          </p>
+        </div>
 
-        <h1 className="text-2xl md:text-4xl font-black tracking-tight text-white">Referral Generator</h1>
-        <p className="max-w-2xl text-base md:text-lg leading-relaxed text-slate-400">
-          Craft thoughtful, company-specific outreach that looks like it came from an insider, not a bot.
-        </p>
+        {/* Daily Limit Tracker Box */}
+        {!fetchingUsage && (
+          <div className="bg-sidebar-bg/60 border border-white/[0.06] rounded-2xl p-5 min-w-[240px] shadow-xl backdrop-blur-sm self-stretch md:self-auto flex flex-col justify-center">
+            <div className="flex justify-between items-center mb-3">
+              <span className={`text-[11px] font-black uppercase tracking-widest ${hasHitLimit ? "text-red-400" : "text-accent-blue"}`}>
+                {hasHitLimit ? "Daily Limit Reached" : "Daily Quota"}
+              </span>
+              <span className="text-sm font-bold text-white">
+                {usageCount} <span className="text-muted-text font-medium">/ {DAILY_LIMIT}</span>
+              </span>
+            </div>
+
+            <div className="w-full h-2.5 bg-background rounded-full overflow-hidden border border-white/[0.04]">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ease-out ${hasHitLimit ? "bg-gradient-to-r from-red-500 to-red-400" : "bg-gradient-to-r from-accent-blue to-blue-400"}`}
+                style={{ width: `${Math.min((usageCount / DAILY_LIMIT) * 100, 100)}%` }}
+              />
+            </div>
+
+            {hasHitLimit && (
+              <p className="text-[10px] text-red-400/80 mt-2 font-medium">
+                Resets at midnight.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="relative grid grid-cols-1 gap-10 xl:grid-cols-12 max-w-[1700px] mx-auto">
@@ -205,7 +318,7 @@ export default function ReferralsPage() {
             onUseResume={handleUseResume}
             onRefine={handleRefine}
             isAutofilled={isAutofilled}
-            isGenerateDisabled={!formValues.jobRole.trim() || !formValues.company.trim() || generating}
+            isGenerateDisabled={!formValues.jobRole.trim() || !formValues.company.trim() || generating || hasHitLimit}
             generating={generating}
             usingResume={usingResume}
             advancedOpen={advancedOpen}

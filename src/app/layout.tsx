@@ -6,7 +6,7 @@ import LayoutWrapper from "@/components/LayoutWrapper";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "JobPilot | AI Career Suite",
+  title: "JobPilot",
   description: "Manage your professional career with AI-driven insights, resume optimization, and job tracking.",
 };
 

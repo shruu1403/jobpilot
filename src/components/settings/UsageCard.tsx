@@ -261,7 +261,7 @@ export default function UsageCard({ userId }: UsageCardProps) {
           <div className="p-2 rounded-lg bg-amber-500/10">
             <Briefcase size={16} className="text-amber-400" />
           </div>
-          <span className="text-sm text-muted-text font-medium">
+          <span className="text-md text-white font-bold ">
             Job Tracking
           </span>
           <span className="ml-auto text-xs text-white/40 font-medium">

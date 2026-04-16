@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import ProfileCard from "@/components/settings/ProfileCard";
 import UsageCard from "@/components/settings/UsageCard";
@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [hasCustomAvatar, setHasCustomAvatar] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async () => {
@@ -19,23 +20,32 @@ export default function SettingsPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
       setUserId(user.id);
-      setAvatarUrl(
-        user.user_metadata?.avatar_url || user.user_metadata?.picture || null
-      );
+      const isGoogleUser = user.app_metadata?.provider === "google";
 
       // Fetch from profiles table
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, role")
+        .select("full_name, role, avatar_url")
         .eq("id", user.id)
         .single();
 
       if (profile) {
         setFullName(profile.full_name || "");
         setRole(profile.role || "");
+        setHasCustomAvatar(Boolean(profile.avatar_url));
+        setAvatarUrl(
+          profile.avatar_url ||
+            (isGoogleUser
+              ? user.user_metadata?.avatar_url || user.user_metadata?.picture
+              : null) ||
+            null
+        );
       } else {
         // Fallback to auth metadata
         setFullName(
@@ -45,6 +55,12 @@ export default function SettingsPage() {
             ""
         );
         setRole(user.user_metadata?.role || "");
+        setHasCustomAvatar(false);
+        setAvatarUrl(
+          (isGoogleUser
+            ? user.user_metadata?.avatar_url || user.user_metadata?.picture
+            : null) || null
+        );
       }
     } catch (err) {
       console.error("Failed to load profile:", err);
@@ -56,6 +72,18 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  if (!loading && !userId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <div className="p-4 bg-red-500/10 rounded-full mb-6 border border-red-500/20">
+          <Lock className="w-10 h-10 text-red-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+        <p className="text-muted-text max-w-md">No access to the settings page for unauthenticated users.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -85,6 +113,7 @@ export default function SettingsPage() {
             fullName={fullName}
             role={role}
             avatarUrl={avatarUrl}
+            hasCustomAvatar={hasCustomAvatar}
             loading={loading}
             onProfileUpdated={fetchProfile}
           />
