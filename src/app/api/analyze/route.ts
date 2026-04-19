@@ -1,46 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
-// Primary: gemini-3.1-flash-lite-preview (high daily limit, fast)
-// Fallbacks from verified available models list
-const MODEL_PRIORITY = [
-  "gemini-3.1-flash-lite-preview",
-  "gemini-2.0-flash-lite",
-  "gemini-2.5-flash-lite",
-  "gemini-2.0-flash",
-];
-
-async function callGemini(prompt: string): Promise<string> {
-  let lastError: any;
-
-  for (const modelName of MODEL_PRIORITY) {
-    try {
-      console.log(`[Analyze] Trying model: ${modelName}`);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      console.log(`[Analyze] Success with model: ${modelName}`);
-      return response.text();
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.status;
-      // Rate limited or model not found → try next
-      if (status === 429 || status === 404) {
-        console.warn(`[Analyze] Model ${modelName} failed (${status}). Trying next...`);
-        continue;
-      }
-      throw err; // Other errors → fail immediately
-    }
-  }
-
-  const is429 = lastError?.status === 429 || lastError?.message?.includes("429");
-  if (is429) {
-    throw new Error("API rate limit reached. Please wait 60 seconds and try again.");
-  }
-  throw lastError || new Error("All models failed.");
-}
+import { callGemini, extractJson } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
@@ -102,16 +61,12 @@ Rules:
 - suggestions should contain exactly 2 highly actionable tips
 - atsIssues should list specific ATS problems like missing keywords, weak action verbs, improper formatting, lack of measurable achievements`;
 
-    // 4. Call Gemini (single call)
-    const text = await callGemini(prompt);
+    // 4. Call Gemini (centralized, with timeout)
+    const text = await callGemini(prompt, { label: "Analyze", timeoutMs: 25_000 });
 
     // 5. Safely Extract JSON
     try {
-      const jsonStart = text.indexOf("{");
-      const jsonEnd = text.lastIndexOf("}") + 1;
-      const jsonText = text.substring(jsonStart, jsonEnd);
-
-      const analysis = JSON.parse(jsonText);
+      const analysis = extractJson(text);
 
       return NextResponse.json({
         matchScore: analysis.matchScore ?? 0,
@@ -132,8 +87,12 @@ Rules:
   } catch (error: any) {
     console.error("[Analyze] API Error:", error);
 
+    const isTimeout = error?.message?.includes("Timed out");
     const is429 = error?.status === 429 || error?.message?.includes("429");
-    const msg = is429
+    
+    const msg = isTimeout
+      ? "Analysis is taking too long. Please try again — the AI service may be under load."
+      : is429
       ? "API rate limit reached. Please wait 60 seconds and try again."
       : `Analysis failed: ${error.message || "Unknown error"}`;
 

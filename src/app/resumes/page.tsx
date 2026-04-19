@@ -11,7 +11,7 @@ import { ResumeCard } from '@/components/resumes/ResumeCard';
 import { AddResumeCard } from '@/components/resumes/AddResumeCard';
 import { Upload, Plus, FileText, Loader2 } from 'lucide-react';
 import { ResumeStatus } from '@/types/resume';
-import toast from 'react-hot-toast';
+import { toast } from "@/lib/toast";
 
 export default function ResumeLibrary() {
   const { user, loading: authLoading } = useUser();
@@ -183,7 +183,7 @@ export default function ResumeLibrary() {
         <div className="bg-[#1E293B]/30 rounded-2xl border-2 border-dashed border-white/5 p-20 text-center flex flex-col items-center justify-center">
           {searchTerm ? (
             <>
-              <div className="w-17 h-17 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
+              <div className="w-16 h-16 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
                 <Plus size={25} className="text-blue-400" />
               </div>
               <h2 className="text-xl font-bold text-white mb-2">No matches found</h2>
@@ -197,11 +197,13 @@ export default function ResumeLibrary() {
               <p className="text-muted-text mb-8 max-w-sm">
                 Ready to level up your career? Upload your first resume to get AI-driven analysis started.
               </p>
-              <AddResumeCard onFileSelect={handleUpload} />
+              <div className="w-full max-w-[280px] h-[240px]">
+                <AddResumeCard onFileSelect={handleUpload} />
+              </div>
             </>
           ) : (
             <>
-              <div className="w-17 h-17 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
+              <div className="w-16 h-16 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20">
                 <FileText size={25} className="text-blue-400" />
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Your library is empty</h2>

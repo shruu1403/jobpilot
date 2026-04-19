@@ -1,40 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { callGemini, extractJson } from "@/lib/gemini";
 import { extractTextFromBuffer } from "@/lib/extractText";
 
-const apiKey = process.env.GEMINI_API_KEY;
+export async function POST(req: NextRequest) {
+  try {
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
+    const existingText = formData.get("text") as string | null;
+    const jobRole = formData.get("jobRole") as string | null;
+    const company = formData.get("company") as string | null;
 
-const MODEL_PRIORITY = [
-  "gemini-3.1-flash-lite-preview",
-  "gemini-1.5-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-2.0-flash",
-];
+    let text = "";
 
-function parseJsonResponse(text: string) {
-  const jsonStart = text.indexOf("{");
-  const jsonEnd = text.lastIndexOf("}") + 1;
+    if (file) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      text = await extractTextFromBuffer(buffer, file.type);
+    } else if (existingText) {
+      text = existingText;
+    } else {
+      return NextResponse.json({ error: "No resume content provided" }, { status: 400 });
+    }
 
-  if (jsonStart === -1 || jsonEnd === 0) {
-    throw new Error("AI did not return JSON.");
-  }
-
-  return JSON.parse(text.slice(jsonStart, jsonEnd));
-}
-
-async function analyzeResume(text: string, jobRole?: string, company?: string) {
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured.");
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  let lastError: any;
-
-  for (const modelName of MODEL_PRIORITY) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-
-      const prompt = `You are an expert career consultant. Analyze the following resume text and provide structured data for a job referral application.
+    const prompt = `You are an expert career consultant. Analyze the following resume text and provide structured data for a job referral application.
 
 RESUME TEXT:
 ${text}
@@ -59,48 +46,15 @@ Return ONLY strict JSON in this exact shape:
 
 Do NOT truncate content randomly. Scan the entire text including projects and contact sections.`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return parseJsonResponse(response.text());
-    } catch (err: any) {
-      lastError = err;
-      if (err?.status === 404 || err?.status === 429) continue;
-      throw err;
-    }
-  }
-  throw lastError;
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const existingText = formData.get("text") as string | null;
-    const jobRole = formData.get("jobRole") as string | null;
-    const company = formData.get("company") as string | null;
-
-    let text = "";
-
-    if (file) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      text = await extractTextFromBuffer(buffer, file.type);
-    } else if (existingText) {
-      text = existingText;
-    } else {
-      return NextResponse.json({ error: "No resume content provided" }, { status: 400 });
-    }
-
-    const analysis = await analyzeResume(
-      text, 
-      jobRole || undefined, 
-      company || undefined
-    );
+    const rawText = await callGemini(prompt, { label: "Autofill", timeoutMs: 20_000 });
+    const analysis = extractJson(rawText);
 
     return NextResponse.json(analysis);
   } catch (error: any) {
     console.error("Autofill API Error:", error);
+    const isTimeout = error?.message?.includes("Timed out");
     return NextResponse.json(
-      { error: error.message || "Failed to analyze resume" },
+      { error: isTimeout ? "Analysis timed out. Please retry." : error.message || "Failed to analyze resume" },
       { status: 500 }
     );
   }

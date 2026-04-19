@@ -5,7 +5,7 @@ import { X, FileText, Calendar, CheckCircle2, Loader2, UploadCloud, Plus } from 
 import { Resume } from "@/types/resume";
 import { getResumes } from "@/services/getResumes";
 import { uploadResume } from "@/services/uploadResume";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface ResumeSelectModalProps {
   userId: string;

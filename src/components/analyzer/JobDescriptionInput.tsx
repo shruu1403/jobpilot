@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  Target, 
-  Link as LinkIcon, 
-  Loader2, 
-  Sparkles, 
+import {
+  Target,
+  Link as LinkIcon,
+  Loader2,
+  Sparkles,
   FileText,
   ScanSearch,
   Globe
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface JobDescriptionInputProps {
   value: string;
@@ -20,12 +20,12 @@ interface JobDescriptionInputProps {
   loading?: boolean;
 }
 
-export function JobDescriptionInput({ 
-  value, 
-  onChange, 
-  jobUrl, 
-  onUrlChange, 
-  loading 
+export function JobDescriptionInput({
+  value,
+  onChange,
+  jobUrl,
+  onUrlChange,
+  loading
 }: JobDescriptionInputProps) {
   const [fetching, setFetching] = useState(false);
 
@@ -64,6 +64,15 @@ export function JobDescriptionInput({
   const charCount = value.length;
   const maxChars = 2000;
 
+  const isValidUrl = (url: string) => {
+    try {
+      const parsedUrl = new URL(url);
+      return (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") && parsedUrl.hostname.includes(".");
+    } catch (_) {
+      return false;
+    }
+  };
+
   const isUrlMode = jobUrl.length > 0;
   const isManualMode = value.length > 0;
 
@@ -97,7 +106,7 @@ export function JobDescriptionInput({
             placeholder={isUrlMode ? "Clear URL below to manually edit..." : "Paste the job description here for the AI to compare against your resume..."}
             className="w-full h-[400px] bg-[#111827] border border-white/5 rounded-[40px] p-10 text-white placeholder:text-muted-text/30 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/40 transition-all font-medium resize-none shadow-2xl backdrop-blur-3xl scrollbar-hide"
           />
-          
+
           <div className="absolute top-10 right-10 text-muted-text/5 group-focus-within:text-purple-500/10 transition-colors pointer-events-none">
             <Target size={180} strokeWidth={0.5} />
           </div>
@@ -126,14 +135,14 @@ export function JobDescriptionInput({
               <LinkIcon size={18} className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isManualMode ? 'text-muted-text/20' : 'text-muted-text group-focus-within:text-blue-400'}`} />
             </div>
           </div>
-          
+
           <button
             onClick={handleFetchJD}
-            disabled={fetching || !jobUrl || isManualMode}
+            disabled={fetching || !jobUrl || !isValidUrl(jobUrl) || isManualMode}
             className="w-full md:w-auto px-10 h-14 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
           >
             {fetching ? <Loader2 size={18} className="animate-spin" /> : <ScanSearch size={18} />}
-            Fetch Intelligence
+            Fetch JD
           </button>
         </div>
       </div>

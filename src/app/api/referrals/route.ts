@@ -1,57 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { callGemini, extractJson } from "@/lib/gemini";
 import type { ReferralFormValues } from "@/types/referral";
-
-const apiKey = process.env.GEMINI_API_KEY;
-
-const MODEL_PRIORITY = [
-  "gemini-3.1-flash-lite-preview",
-  "gemini-1.5-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-2.0-flash",
-];
-
-function parseJsonResponse(text: string) {
-  const jsonStart = text.indexOf("{");
-  const jsonEnd = text.lastIndexOf("}") + 1;
-
-  if (jsonStart === -1 || jsonEnd === 0) {
-    throw new Error("AI did not return JSON.");
-  }
-
-  return JSON.parse(text.slice(jsonStart, jsonEnd));
-}
-
-async function callGemini(prompt: string) {
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured.");
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  let lastError: unknown;
-
-  for (const modelName of MODEL_PRIORITY) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
-    } catch (error: unknown) {
-      lastError = error;
-      const status =
-        typeof error === "object" && error !== null && "status" in error
-          ? (error as { status?: number }).status
-          : undefined;
-
-      if (status === 429 || status === 404) {
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw lastError ?? new Error("All Gemini models failed.");
-}
 
 function buildPrompt(values: ReferralFormValues & { variationSeed?: number }) {
   return `You are writing highly personalized referral outreach.
@@ -77,6 +26,7 @@ Writing requirements:
 - Sound human, concise, and credible.
 - Avoid generic praise and robotic phrasing.
 - Mention the company specifically.
+- **CRITICAL**: You MUST seamlessly weave the "Why this company" reasoning into the message to demonstrate deep, personalized interest in the company. Do not ignore this field.
 - Use the candidate background naturally and only if supported by the provided inputs.
 - Align key skills with the role.
 - Respect connection context:
@@ -124,8 +74,8 @@ export async function POST(request: NextRequest) {
       portfolioLink: body.portfolioLink?.trim().slice(0, 300) ?? "",
     });
 
-    const rawText = await callGemini(prompt);
-    const parsed = parseJsonResponse(rawText);
+    const rawText = await callGemini(prompt, { label: "Referrals", timeoutMs: 20_000 });
+    const parsed = extractJson(rawText);
 
     return NextResponse.json({
       linkedinMessage: String(parsed.linkedinMessage || "").trim(),
@@ -141,13 +91,16 @@ export async function POST(request: NextRequest) {
         : undefined;
     const message =
       error instanceof Error ? error.message : "Failed to generate referral drafts.";
+    const isTimeout = message.includes("Timed out");
     const is429 = status === 429 || message.includes("429");
 
     return NextResponse.json(
       {
-        error: is429
-          ? "Gemini is rate limited right now. Please try again in a minute."
-          : message,
+        error: isTimeout
+          ? "Server busy. Please try again."
+          : is429
+            ? "Rate limit reached. Retry in 1m."
+            : message,
       },
       { status: is429 ? 429 : 500 }
     );

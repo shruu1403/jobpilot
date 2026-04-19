@@ -24,8 +24,9 @@ import { MatchScoreCard } from "@/components/analyzer/MatchScoreCard";
 import { SkillGapsCard } from "@/components/analyzer/SkillGapsCard";
 import { SuggestionsCard } from "@/components/analyzer/SuggestionsCard";
 import { HistoryModal } from "@/components/analyzer/HistoryModal";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { supabase } from "@/lib/supabaseClient";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { exportToPDF, exportToDOCX } from "@/lib/exportUtils";
 
 const DAILY_LIMIT = 5;
@@ -163,7 +164,7 @@ export default function AnalyzerPage() {
         const formData = new FormData();
         formData.append("file", guestFile);
 
-        const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
+        const extractRes = await fetchWithTimeout("/api/extract", { method: "POST", body: formData }, 15_000);
 
         const contentType = extractRes.headers.get("content-type");
         let extractData;
@@ -188,7 +189,7 @@ export default function AnalyzerPage() {
         const formData = new FormData();
         formData.append("file", fileData);
 
-        const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
+        const extractRes = await fetchWithTimeout("/api/extract", { method: "POST", body: formData }, 15_000);
 
         const contentType = extractRes.headers.get("content-type");
         let extractData;
@@ -207,11 +208,11 @@ export default function AnalyzerPage() {
       setRawResumeText(resumeText); // Save for quick-fix/cover letter
 
       // AI Analysis
-      const analyzeRes = await fetch("/api/analyze", {
+      const analyzeRes = await fetchWithTimeout("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeText, jobDescription }),
-      });
+      }, 30_000);
 
       const data = await analyzeRes.json();
 
@@ -263,7 +264,10 @@ export default function AnalyzerPage() {
         throw new Error(data.error || "Analysis failed");
       }
     } catch (error: any) {
-      toast.error(error.message);
+      const msg = error?.isTimeout 
+        ? "Analysis timed out — the AI service may be busy. Please try again." 
+        : error.message;
+      toast.error(msg);
     } finally {
       setAnalyzing(false);
     }
@@ -280,11 +284,11 @@ export default function AnalyzerPage() {
 
     try {
       setFixingResume(true);
-      const res = await fetch("/api/quick-fix", {
+      const res = await fetchWithTimeout("/api/quick-fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeText: rawResumeText })
-      });
+      }, 40_000);
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -299,7 +303,10 @@ export default function AnalyzerPage() {
       setAtsImprovements(data.improvements || []);
       toast.success("Resume repaired and formatting optimized!");
     } catch (err: any) {
-      toast.error(err.message || "Quick Fix failed");
+      const msg = err?.isTimeout 
+        ? "Resume optimization timed out — please try again." 
+        : err.message || "Quick Fix failed";
+      toast.error(msg);
     } finally {
       setFixingResume(false);
     }
@@ -316,19 +323,23 @@ export default function AnalyzerPage() {
 
     try {
       setGeneratingLetter(true);
-      const res = await fetch("/api/cover-letter", {
+      const res = await fetchWithTimeout("/api/cover-letter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resumeText: rawResumeText, jobDescription })
-      });
+      }, 30_000);
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setCoverLetter(data.coverLetter);
-      toast.success("Cover letter generated seamlessly!");
-    } catch (err: any) {
-      toast.error(err.message || "Cover Letter generation failed");
+      toast.success("Cover letter generated!");
+    } catch (error: any) {
+      const isTimeout = error && typeof error === 'object' && 'isTimeout' in error;
+      const msg = isTimeout 
+        ? "AI is busy. Please try again." 
+        : getErrorMessage(error, "Generation failed");
+      toast.error(msg);
     } finally {
       setGeneratingLetter(false);
     }
@@ -410,9 +421,9 @@ export default function AnalyzerPage() {
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 space-y-6 animate-in fade-in duration-700">
+    <div className="max-w-[1400px] mx-auto px-2 sm:px-4 md:px-6 space-y-6 animate-in fade-in duration-700">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row items-end justify-between gap-8 border-b border-white/5 pb-10">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-8 md:pb-10">
         <div className="space-y-2 max-w-2xl">
           <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full w-fit">
             <Sparkles size={14} className="text-blue-400" />
@@ -424,12 +435,12 @@ export default function AnalyzerPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 justify-end">
+        <div className="flex flex-wrap justify-start md:justify-end items-center gap-3 sm:gap-4 mt-4 md:mt-0">
           {/* History Button — disabled for guest users */}
           {isAuthenticated ? (
             <button
               onClick={() => setHistoryOpen(true)}
-              className="px-6 py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white font-bold text-sm transition-all flex items-center gap-3 group hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/20 whitespace-nowrap"
+              className="px-4 py-3 sm:px-6 sm:py-3.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-muted-text hover:text-white font-bold text-xs sm:text-sm transition-all flex items-center gap-2 sm:gap-3 group hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/20 whitespace-nowrap"
             >
               <HistoryIcon size={18} className="group-hover:rotate-[-15deg] transition-transform" />
               <span>View History</span>
@@ -444,14 +455,14 @@ export default function AnalyzerPage() {
               <span>View History</span>
             </button>
           )}
-          <div className="px-5 py-3.5 bg-white/[0.03] border border-white/5 rounded-2xl text-muted-text text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+          <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-white/[0.03] border border-white/5 rounded-2xl text-muted-text text-xs sm:text-sm font-bold flex items-center gap-2 whitespace-nowrap">
             <span className="text-blue-400 font-black">{dailyAnalyses} / {DAILY_LIMIT}</span>
             <span className="text-white/20 text-xs ml-0.5">today</span>
           </div>
           <button
             onClick={handleAnalyze}
             disabled={!selectedResume || !jobDescription || analyzing || isLimitReached || isRedundant}
-            className="px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-sm uppercase tracking-widest rounded-2xl hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all flex items-center gap-2 group disabled:opacity-50 disabled:grayscale disabled:pointer-events-none min-w-[240px] justify-center"
+            className="w-full sm:w-auto px-6 sm:px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs sm:text-sm uppercase tracking-widest rounded-2xl hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all flex items-center gap-2 group disabled:opacity-50 disabled:grayscale disabled:pointer-events-none min-w-0 sm:min-w-[240px] justify-center"
           >
             {analyzing ? (
               <>
@@ -514,13 +525,13 @@ export default function AnalyzerPage() {
       </div>
 
       {/* NEW: Secondary Features Section (Visible after Analyze) */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-white/5 transition-all duration-1000 ${analysisComplete ? "opacity-100" : "opacity-30 grayscale blur-[1px] pointer-events-none"}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-8 sm:pt-10 border-t border-white/5 transition-all duration-1000 ${analysisComplete ? "opacity-100" : "opacity-30 grayscale blur-[1px] pointer-events-none"}`}>
 
         {/* Cover Letter Block */}
-        <div className="bg-gradient-to-br from-[#111827] to-[#0B1220] border border-white/5 rounded-[40px] p-10 flex flex-col justify-start gap-6 relative overflow-hidden group h-fit">
-          <div className="flex items-center justify-between z-10 relative">
-            <div className="space-y-4 max-w-[260px]">
-              <h3 className="text-2xl font-black text-white leading-tight">Generate a tailored cover letter</h3>
+        <div className="bg-gradient-to-br from-[#111827] to-[#0B1220] border border-white/5 rounded-[28px] sm:rounded-[40px] p-6 sm:p-10 flex flex-col justify-start gap-6 relative overflow-hidden group h-fit">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 z-10 relative">
+            <div className="space-y-4 max-w-full sm:max-w-[260px]">
+              <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">Generate a tailored cover letter</h3>
               <p className="text-muted-text text-sm font-medium leading-relaxed">
                 Draft a professional letter that highlights your strengths while addressing the gaps identified.
               </p>
@@ -545,7 +556,7 @@ export default function AnalyzerPage() {
             </div>
 
             {/* Replaced 'A' symbol with Logo image */}
-            <div className="relative mr-4 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-white/10">
+            <div className="relative mr-0 sm:mr-4 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-white/10 hidden sm:block">
               <Image
                 src="/logo.png"
                 alt="Logo"
@@ -566,13 +577,13 @@ export default function AnalyzerPage() {
         </div>
 
         {/* Quick Fix Block / ATS Section Combine */}
-        <div className="bg-[#111827] border border-white/5 rounded-[40px] p-10 flex flex-col relative overflow-hidden group h-fit">
-          <div className="flex items-start justify-between gap-6 z-10 relative">
+        <div className="bg-[#111827] border border-white/5 rounded-[28px] sm:rounded-[40px] p-6 sm:p-10 flex flex-col relative overflow-hidden group h-fit">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4 sm:gap-6 z-10 relative">
             <div className="space-y-4 max-w-sm">
               <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
                 <FileEdit size={24} />
               </div>
-              <h3 className="text-2xl font-black text-white leading-tight">Quick Fix (ATS)</h3>
+              <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">Quick Fix (ATS)</h3>
 
               {atsIssues.length > 0 && !fixedResume && (
                 <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl space-y-1">

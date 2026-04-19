@@ -1,12 +1,13 @@
 "use client";
 
 import { startTransition, useState, useEffect } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { ReferralForm } from "@/components/referrals/ReferralForm";
 import { OutputPanel } from "@/components/referrals/OutputPanel";
 import { getResumes } from "@/services/getResumes";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/hooks/useUser";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { Sparkles } from "lucide-react";
 import { ResumeSelectModal } from "@/components/analyzer/ResumeSelectModal";
 import type { ReferralFormValues, ReferralResponse } from "@/types/referral";
@@ -34,7 +35,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function ReferralsPage() {
-  const { user } = useUser();
+  const { user, userName } = useUser();
   const [formValues, setFormValues] = useState<ReferralFormValues>(initialValues);
   const [result, setResult] = useState<ReferralResponse | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -108,19 +109,31 @@ export default function ReferralsPage() {
     try {
       setGenerating(true);
 
-      const response = await fetch("/api/referrals", {
+      const response = await fetchWithTimeout("/api/referrals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formValues,
           variationSeed: nextVariation,
         }),
-      });
+      }, 25_000);
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Unable to generate referral drafts.");
+      }
+
+      // Replace [Your Name] placeholders with the real authenticated user name
+      const realName = userName && userName !== "User" ? userName : null;
+      if (realName) {
+        const namePlaceholder = /\[Your Name\]/gi;
+        if (data.linkedinMessage) {
+          data.linkedinMessage = data.linkedinMessage.replace(namePlaceholder, realName);
+        }
+        if (data.email?.body) {
+          data.email.body = data.email.body.replace(namePlaceholder, realName);
+        }
       }
 
       startTransition(() => {
@@ -160,7 +173,11 @@ export default function ReferralsPage() {
 
       toast.success("Referral drafts generated");
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Generation failed"));
+      const isTimeout = error && typeof error === 'object' && 'isTimeout' in error;
+      const msg = isTimeout
+        ? "AI is busy. Please try again."
+        : getErrorMessage(error, "Generation failed");
+      toast.error(msg);
     } finally {
       setGenerating(false);
     }
@@ -181,7 +198,7 @@ export default function ReferralsPage() {
     if (!user?.id) {
       toast('Sign in to pull your info from a library resume', {
         icon: '🔒',
-        duration: 6000,
+        duration: 4000,
         style: {
           background: '#1e293b',
           color: '#fff',
@@ -213,10 +230,10 @@ export default function ReferralsPage() {
       if (formValues.jobRole) formData.append("jobRole", formValues.jobRole);
       if (formValues.company) formData.append("company", formValues.company);
 
-      const autofillRes = await fetch("/api/referrals/autofill", {
+      const autofillRes = await fetchWithTimeout("/api/referrals/autofill", {
         method: "POST",
         body: formData,
-      });
+      }, 25_000);
 
       const data = await autofillRes.json();
 
@@ -235,9 +252,13 @@ export default function ReferralsPage() {
       // Store raw text for future "Refine" calls if we decide to implement text-based refinement
       // For now, let's keep it simple. If we want faster refinement, we can extract text once.
       setIsAutofilled(true);
-      toast.success("Smart info pulled from resume!");
+      toast.success("Info pulled from resume!");
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Failed to pull from resume"));
+      const isTimeout = error && typeof error === 'object' && 'isTimeout' in error;
+      const msg = isTimeout
+        ? "Analysis timed out. Please retry."
+        : getErrorMessage(error, "Failed to pull from resume");
+      toast.error(msg);
     } finally {
       setUsingResume(false);
     }
@@ -349,3 +370,4 @@ export default function ReferralsPage() {
     </div>
   );
 }
+

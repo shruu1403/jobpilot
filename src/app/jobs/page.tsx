@@ -7,7 +7,7 @@ import { InsightsPanel } from "@/components/jobs/InsightsPanel";
 import { AddJobModal } from "@/components/jobs/AddJobModal";
 import { useJobStore } from "@/store/useJobStore";
 import { useUser } from "@/hooks/useUser";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export default function JobTrackerPage() {
   const { user } = useUser();
@@ -40,7 +40,7 @@ export default function JobTrackerPage() {
 
   return (
 
-    <div className="h-[calc(100vh-100px)] flex flex-col">
+    <div className="min-h-[calc(100vh-100px)] flex flex-col">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>

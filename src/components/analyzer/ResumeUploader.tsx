@@ -5,7 +5,7 @@ import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2, RefreshCw, T
 import { Resume } from "@/types/resume";
 import { uploadResume } from "@/services/uploadResume";
 import { ResumeSelectModal } from "./ResumeSelectModal";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface ResumeUploaderProps {
   userId: string;

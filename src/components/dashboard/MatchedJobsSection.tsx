@@ -7,15 +7,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HistoryModal } from "@/components/analyzer/HistoryModal";
-import { Briefcase, Building2, ExternalLink, Loader2, Play, ChevronRight } from "lucide-react";
+import { Briefcase, Building2, ExternalLink, Loader2, Play, ChevronRight, Sparkles } from "lucide-react";
 import { Analysis } from "@/types/analysis";
 
 interface JobCardProps {
   analysis: Analysis;
   index: number;
+  isDemo?: boolean;
 }
 
-function JobCard({ analysis, index }: JobCardProps) {
+function JobCard({ analysis, index, isDemo }: JobCardProps) {
+  const router = useRouter();
   // Extract info from analysis
   const jobTitle = analysis.job_title || "Unknown Role";
   const company = analysis.company || "Unknown Company";
@@ -97,7 +99,7 @@ function JobCard({ analysis, index }: JobCardProps) {
         {/* AI Reason */}
         <div className="mb-4">
           <p className="text-[13px] text-muted-text italic leading-relaxed line-clamp-3">
-            &quot;AI Reason: {aiReason}&quot;
+            &quot;Reason: {aiReason}&quot;
           </p>
         </div>
 
@@ -113,27 +115,64 @@ function JobCard({ analysis, index }: JobCardProps) {
 
       {/* CTA Button */}
       <div className="relative z-10 mt-auto">
-        <Link href="/jobs" className="flex items-center justify-center gap-2 w-full py-2.5 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.1] hover:border-white/[0.2] transition-colors rounded-xl text-sm font-bold text-white">
+        <button 
+          onClick={() => {
+            if (isDemo) {
+              import("@/lib/toast").then((module) => {
+                module.toast('Sign up to apply and track your jobs', {
+                  icon: '🔒',
+                  duration: 6000,
+                  style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(59,130,246,0.3)' },
+                });
+              });
+            } else {
+              router.push('/jobs');
+            }
+          }}
+          className="flex items-center justify-center gap-2 w-full py-2.5 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.1] hover:border-white/[0.2] transition-colors rounded-xl text-sm font-bold text-white cursor-pointer"
+        >
           <Play size={14} className="text-white/60" />
           Quick Apply
-        </Link>
+        </button>
       </div>
     </motion.div>
   );
 }
 
-export default function MatchedJobsSection() {
+export default function MatchedJobsSection({ isDemo }: { isDemo?: boolean }) {
   const { user } = useUser();
   const router = useRouter();
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const hasFetched = useRef(false);
 
   useEffect(() => {
     async function fetchMatches() {
-      if (!user?.id || hasFetched.current) return;
-      hasFetched.current = true;
+      if (isDemo) {
+        setLoading(true);
+        const demoMatches = [
+          {
+            id: "demo1",
+            job_title: "Senior Frontend Engineer",
+            company: "Stripe",
+            match_score: 92,
+            reason: "Matches your React and TypeScript expertise closely.",
+            tags: ["React", "TypeScript", "Frontend"]
+          },
+          {
+            id: "demo2",
+            job_title: "Software Engineer II",
+            company: "Vercel",
+            match_score: 87,
+            reason: "Strong alignment with your core web development skills.",
+            tags: ["Next.js", "Web", "Engineering"]
+          }
+        ];
+        setAnalyses(demoMatches as any[]);
+        setLoading(false);
+        return;
+      }
+      if (!user?.id) return;
       
       try {
         setLoading(true);
@@ -173,7 +212,7 @@ export default function MatchedJobsSection() {
     }
 
     fetchMatches();
-  }, [user?.id]);
+  }, [user?.id, isDemo]);
 
   if (loading) {
     return (
@@ -193,7 +232,32 @@ export default function MatchedJobsSection() {
 
   // If literally no data, hide section or show empty state
   if (analyses.length === 0) {
-    return null;
+    return (
+      <div className="space-y-4 h-[calc(100%-2rem)] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white tracking-tight">
+            Matched Jobs
+          </h2>
+        </div>
+
+        {/* Empty State */}
+        <div className="flex-1 flex flex-col items-center justify-center min-h-[260px] rounded-2xl bg-[#0f172a]/50 border border-dashed border-white/10 p-8 text-center transition-all hover:bg-white/[0.03] hover:border-white/20">
+          <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
+            <Sparkles size={24} className="text-blue-400" />
+          </div>
+          <h3 className="text-base font-bold text-white mb-2">No Matches Yet</h3>
+          <p className="text-sm text-muted-text max-w-sm mb-6">
+            Upload and analyze your resume to let our AI find the perfect roles tailored to your exact skills and experience.
+          </p>
+          <Link href="/analyzer">
+            <button className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-[11px] uppercase tracking-widest rounded-xl hover:scale-105 transition-transform shadow-[0_0_20px_rgba(37,99,235,0.2)]">
+              Analyze Resume
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -204,7 +268,7 @@ export default function MatchedJobsSection() {
           Matched Jobs
         </h2>
         <button 
-          onClick={() => setIsHistoryOpen(true)}
+          onClick={() => isDemo ? (window.location.href = '/signup') : setIsHistoryOpen(true)}
           className="text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1.5 group cursor-pointer bg-transparent border-none p-0 disabled:opacity-50"
         >
           View All
@@ -216,7 +280,7 @@ export default function MatchedJobsSection() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-5">
         <AnimatePresence>
           {analyses.map((analysis, i) => (
-            <JobCard key={analysis.id || i} analysis={analysis} index={i} />
+            <JobCard key={analysis.id || i} analysis={analysis} index={i} isDemo={isDemo} />
           ))}
         </AnimatePresence>
       </div>

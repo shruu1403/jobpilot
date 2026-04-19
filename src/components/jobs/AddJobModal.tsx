@@ -5,7 +5,7 @@ import { Job, JobStatus } from '@/types/job';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import { Analysis } from '@/types/analysis';
-import toast from 'react-hot-toast';
+import { toast } from "@/lib/toast";
 
 interface AddJobModalProps {
   isOpen: boolean;
@@ -116,6 +116,19 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
       setJobType('');
       setIsExtracting(false);
     }
+  }, [isOpen]);
+
+  // Prevent background scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -441,7 +454,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
 
           {activeTab === 'manual' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Job Title *</label>
                   <input
@@ -462,7 +475,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Status</label>
                   <div className="relative">
@@ -497,7 +510,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Tags (comma separated)</label>
                   <input
@@ -612,28 +625,30 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Interview Details</label>
-                <div className="flex gap-4">
-                  <input
-                    type="text"
-                    value={interviewStatus}
-                    onChange={(e) => setInterviewStatus(e.target.value)}
-                    placeholder="e.g. Round 1"
-                    className="w-1/2 bg-[#1E2538] border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-blue/50"
-                  />
-                  <input
-                    type="text"
-                    value={interviewTime}
-                    onChange={(e) => setInterviewTime(e.target.value)}
-                    placeholder="e.g. Tomorrow at 2 PM"
-                    className="w-1/2 bg-[#1E2538] border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-blue/50"
-                  />
+              {(status === 'Applied' || status === 'Interview') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Interview Details</label>
+                  <div className="flex gap-4">
+                    <input
+                      type="text"
+                      value={interviewStatus}
+                      onChange={(e) => setInterviewStatus(e.target.value)}
+                      placeholder="e.g. Round 1"
+                      className="w-1/2 bg-[#1E2538] border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-blue/50"
+                    />
+                    <input
+                      type="text"
+                      value={interviewTime}
+                      onChange={(e) => setInterviewTime(e.target.value)}
+                      placeholder="e.g. Tomorrow at 2 PM"
+                      className="w-1/2 bg-[#1E2538] border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-blue/50"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {status === 'Offer' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Offer Progress (%)</label>
                     <input

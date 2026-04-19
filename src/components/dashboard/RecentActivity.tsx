@@ -25,13 +25,24 @@ const TYPE_COLORS: Record<string, string> = {
   referral: "#06b6d4" // cyan
 };
 
-export default function RecentActivity() {
+export default function RecentActivity({ isDemo }: { isDemo?: boolean }) {
   const { user } = useUser();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchActivities() {
+      if (isDemo) {
+        const demoLog = [
+          { id: "1", user_id: "demo", type: "resume", title: "Uploaded Resume", description: "Uploaded alex_resume_2024.pdf", created_at: new Date().toISOString() },
+          { id: "2", user_id: "demo", type: "analysis", title: "Generated AI Insights", description: "Analyzed resume for Senior Frontend Dev role", created_at: new Date(Date.now() - 3600000).toISOString() },
+          { id: "3", user_id: "demo", type: "job", title: "Saved Job", description: "Frontend Engineer at Vercel", created_at: new Date(Date.now() - 86400000).toISOString() }
+        ];
+        setActivities(demoLog as any[]);
+        setLoading(false);
+        return;
+      }
+
       if (!user) return;
       
       try {
@@ -51,7 +62,9 @@ export default function RecentActivity() {
       }
     }
 
-    if (user) {
+    if (isDemo) {
+      fetchActivities();
+    } else if (user) {
       fetchActivities();
     } else {
       setLoading(false);
@@ -78,7 +91,7 @@ export default function RecentActivity() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, isDemo]);
 
   if (loading) {
     return (

@@ -2,6 +2,68 @@ import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import puppeteer from "puppeteer";
 
+// Heuristic check: does the extracted text actually look like a job description?
+function looksLikeJobDescription(text: string): boolean {
+  const lower = text.toLowerCase();
+  const jobSignals = [
+    "responsibilities",
+    "requirements",
+    "qualifications",
+    "experience",
+    "skills",
+    "salary",
+    "apply",
+    "candidate",
+    "role",
+    "position",
+    "job description",
+    "we are looking",
+    "you will",
+    "you'll",
+    "must have",
+    "nice to have",
+    "preferred",
+    "full-time",
+    "full time",
+    "part-time",
+    "part time",
+    "remote",
+    "hybrid",
+    "onsite",
+    "on-site",
+    "internship",
+    "benefits",
+    "compensation",
+    "hiring",
+    "team",
+    "proficiency",
+    "degree",
+    "bachelor",
+    "years of experience",
+    "job type",
+    "employment type",
+    "about the role",
+    "what you'll do",
+    "who you are",
+    "key responsibilities",
+    "desired skills",
+    "stipend",
+    "ctc",
+    "lpa",
+    "perks",
+  ];
+
+  let matchCount = 0;
+  for (const signal of jobSignals) {
+    if (lower.includes(signal)) {
+      matchCount++;
+    }
+  }
+
+  // Require at least 3 job-related keywords to consider it a valid JD
+  return matchCount >= 3;
+}
+
 // Normalize Indeed URLs: convert /?vjk=xxx to /viewjob?jk=xxx
 function normalizeIndeedUrl(url: string): string {
   try {
@@ -164,6 +226,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
+    try {
+      const parsedUrl = new URL(url);
+      if (!parsedUrl.hostname.includes(".")) {
+        return NextResponse.json(
+          { error: "Invalid URL provided. Please include a valid domain." },
+          { status: 400 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid URL provided. Please check the format." },
+        { status: 400 }
+      );
+    }
+
     const normalizedUrl = normalizeIndeedUrl(url);
 
     // Strategy 1: Simple fetch (fast, works for non-protected sites)
@@ -179,7 +256,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Could not extract the job description. The site may have strong bot protection. Try copying the job description text manually.",
+            "Could not reach this page. Please paste text manually.",
+        },
+        { status: 422 }
+      );
+    }
+
+    // Validate that the extracted content actually resembles a job description
+    if (!looksLikeJobDescription(text)) {
+      return NextResponse.json(
+        {
+          error:
+            "This doesn't look like a job posting. Please use a job listing URL.",
         },
         { status: 422 }
       );
@@ -191,7 +279,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Failed to extract job content from this link. Please ensure the URL is correct or paste the job description manually.",
+          "Failed to extract JD from link. Please paste text manually.",
       },
       { status: 500 }
     );

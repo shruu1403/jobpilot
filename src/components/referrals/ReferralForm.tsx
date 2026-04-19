@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import type {
   CallToAction,
   ConnectionContext,
@@ -164,10 +165,10 @@ export function ReferralForm({
       const suggest = async () => {
         try {
           setIsSuggesting(true);
-          const res = await fetch("/api/referrals/suggest-why", {
+          const res = await fetchWithTimeout("/api/referrals/suggest-why", {
             method: "POST",
             body: JSON.stringify({ jobRole: values.jobRole, company: values.company }),
-          });
+          }, 12_000);
           const data = await res.json();
           if (data.suggestion) {
             onChange("whyCompany", data.suggestion);

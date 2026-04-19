@@ -6,12 +6,13 @@ import { useUser } from "@/hooks/useUser";
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
-export function Navbar() {
+export function Navbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const { user, userName, userRole, loading, avatarUrl } = useUser();
   const isAuthenticated = !!user;
   const [showDropdown, setShowDropdown] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -35,12 +36,18 @@ export function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setShowDropdown(false);
+    const toastId = toast.loading("Logging out...");
+
     const { error } = await supabase.auth.signOut();
     if (error) {
-      toast.error("Logout failed!");
+      toast.error("Logout failed!", { id: toastId });
+      setLoggingOut(false);
     } else {
-      toast.success("Successfully logged out");
-      router.replace("/");
+      toast.success("Successfully logged out", { id: toastId });
+      window.location.href = "/";
     }
   };
 
@@ -61,9 +68,16 @@ export function Navbar() {
   };
 
   return (
-    <header className="h-[60px] sticky top-0 right-0 glass border-b border-sidebar-border z-40 px-8 flex items-center justify-between">
+    <header className="h-[60px] sticky top-0 right-0 glass border-b border-sidebar-border z-40 px-3 sm:px-4 md:px-8 flex items-center justify-between">
+      {/* Mobile Menu Toggle */}
+      <button 
+        onClick={onMenuToggle}
+        className="md:hidden p-2 text-muted-text hover:text-white mr-2"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
       {/* Search Section */}
-      <div className={`flex-1 max-w-[400px] transition-all duration-500 ${isResumePage ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
+      <div className={`flex-1 max-w-[400px] transition-all duration-500 hidden sm:block ${isResumePage ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"}`}>
         <div className="relative group">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-text group-focus-within:text-white transition-colors duration-200">
             <SearchIcon size={18} />
@@ -79,21 +93,21 @@ export function Navbar() {
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
 
         {/* Sign Up button — only for unauthenticated users */}
         {!loading && !isAuthenticated && (
           <Link
             href="/signup"
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 shadow-[0_0_16px_rgba(37,99,235,0.3)] transition-all"
+            className="flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 shadow-[0_0_16px_rgba(37,99,235,0.3)] transition-all"
           >
             <UserPlus size={15} />
-            Sign Up
+            <span className="hidden sm:inline">Sign Up</span>
           </Link>
         )}
 
         {/* Divider */}
-        <div className="w-[1px] h-6 bg-sidebar-border" />
+        <div className="w-[1px] h-6 bg-sidebar-border hidden sm:block" />
 
         {/* User Profile */}
         <div className="relative" ref={dropdownRef}>
@@ -101,7 +115,7 @@ export function Navbar() {
             className="flex items-center gap-3 cursor-pointer group"
             onClick={() => setShowDropdown(!showDropdown)}
           >
-            <div className="flex flex-col items-end mr-1">
+            <div className="hidden sm:flex flex-col items-end mr-1">
               <span className="text-[13px] font-semibold text-white leading-tight group-hover:text-accent-blue transition-colors">
                 {loading ? "..." : userName}
               </span>
@@ -133,10 +147,11 @@ export function Navbar() {
               
               <button 
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-500/10 rounded-xl transition-all group/logout"
+                disabled={loggingOut}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-red-500 rounded-xl transition-all group/logout ${loggingOut ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500/10'}`}
               >
-                <LogOut size={16} className="group-hover/logout:-translate-x-1 transition-transform" />
-                <span className="text-[11px] font-black tracking-widest uppercase">Logout</span>
+                <LogOut size={16} className={`transition-transform ${!loggingOut && 'group-hover/logout:-translate-x-1'}`} />
+                <span className="text-[11px] font-black tracking-widest uppercase">{loggingOut ? "Logging out..." : "Logout"}</span>
               </button>
             </div>
           )}

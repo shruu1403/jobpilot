@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import toast from 'react-hot-toast';
+import { toast } from "@/lib/toast";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -121,8 +121,8 @@ export default function Login() {
 
 
       {/* Main Card */}
-      <div className="w-full max-w-[480px] bg-[#111827] border border-white/5 rounded-[32px] p-8 relative z-10 shadow-2xl backdrop-blur-xl animate-in zoom-in duration-500">
-        <div className="flex flex-col items-center gap-3 mb-8 relative z-10 transition-all duration-700 animate-in fade-in slide-in-from-top-4">
+      <div className="w-full max-w-[480px] bg-[#111827] border border-white/5 rounded-[24px] sm:rounded-[32px] p-6 sm:p-8 relative z-10 shadow-2xl backdrop-blur-xl animate-in zoom-in duration-500">
+        <div className="flex flex-col items-center gap-2 sm:gap-3 mb-6 sm:mb-8 relative z-10 transition-all duration-700 animate-in fade-in slide-in-from-top-4">
           <Image src="/logo.png" alt="JobPilot Logo" width={48} height={48} className="rounded-2xl shadow-[0_0_30px_rgba(59,130,246,0.5)] transition-transform hover:scale-110" />
           <h1 className="text-2xl font-black text-white tracking-widest uppercase">JobPilot</h1>
         </div>
@@ -130,7 +130,7 @@ export default function Login() {
 
 
         {/* Email/Password Form */}
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-muted-text uppercase tracking-widest ml-1">Email Address</label>
             <div className="relative group">
@@ -140,7 +140,7 @@ export default function Login() {
                 placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-14 pl-12 pr-4 bg-[#0B1220] border border-white/5 rounded-2xl text-white placeholder:text-muted-text/30 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all font-medium"
+                className="w-full h-12 sm:h-14 pl-12 pr-4 bg-[#0B1220] border border-white/5 rounded-2xl text-white placeholder:text-muted-text/30 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all font-medium"
               />
             </div>
           </div>
@@ -163,7 +163,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-14 pl-12 pr-14 bg-[#0B1220] border border-white/5 rounded-2xl text-white placeholder:text-muted-text/30 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all font-medium"
+                className="w-full h-12 sm:h-14 pl-12 pr-14 bg-[#0B1220] border border-white/5 rounded-2xl text-white placeholder:text-muted-text/30 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all font-medium"
               />
 
               <button
@@ -178,7 +178,7 @@ export default function Login() {
               <button
             onClick={handleLogin}
             disabled={loading}
-            className="w-full h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-2xl hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none uppercase tracking-widest text-[13px]"
+            className="w-full h-12 sm:h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-2xl hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none uppercase tracking-widest text-[13px]"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : 'Sign In to Dashboard'}
           </button>
@@ -190,7 +190,7 @@ export default function Login() {
           {/* OAuth Actions */}
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 py-4 border border-white/5 rounded-2xl bg-white/[0.03] text-white font-black text-[12px] tracking-[0.2em] hover:bg-white/[0.05] transition-all duration-300 uppercase shadow-lg shadow-black/20 group"
+            className="w-full flex items-center justify-center gap-3 py-3 sm:py-4 border border-white/5 rounded-2xl bg-white/[0.03] text-white font-black text-[12px] tracking-[0.2em] hover:bg-white/[0.05] transition-all duration-300 uppercase shadow-lg shadow-black/20 group"
           >
             <img src="https://www.google.com/favicon.ico" alt="Google" className="w-4 h-4 transition-transform group-hover:scale-125" />
             Continue with Google

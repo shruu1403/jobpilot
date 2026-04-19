@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, RefreshCw, Sparkles } from "lucide-react";
+import { Copy, RefreshCw, Sparkles, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -105,13 +105,6 @@ export function MessageCard({
                 </span>
               </div>
               <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center sm:text-left">
-                <span>{wordCount} words</span>
-                {subject && <span className="h-1 w-1 rounded-full bg-slate-700 mx-2" />}
-                {subject && (
-                  <p className="line-clamp-1 italic">
-                    Subject: <span className="text-slate-300">{subject}</span>
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -127,13 +120,26 @@ export function MessageCard({
                 <RefreshCw size={18} />
               </button>
             )}
+            {subject && (
+              <a
+                href={`mailto:?subject=${encodeURIComponent(subject || '')}&body=${encodeURIComponent(content || '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex flex-1 sm:flex-none justify-center items-center gap-2 sm:gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 sm:px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-300 transition-all hover:scale-[1.02] hover:border-cyan-400/40 hover:bg-cyan-400/20"
+              >
+                <Mail size={16} />
+                <span className="hidden sm:inline">Mail To</span>
+                <span className="sm:hidden">Mail</span>
+              </a>
+            )}
             <button
               type="button"
               onClick={onCopy}
-              className="group flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5 px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-200 transition-all hover:scale-[1.02] hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
+              className="group flex flex-1 sm:flex-none justify-center items-center gap-2 sm:gap-3 rounded-2xl border border-white/5 bg-white/5 px-4 sm:px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-200 transition-all hover:scale-[1.02] hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
             >
               <Copy size={16} />
-              {copyLabel}
+              <span className="hidden sm:inline">{copyLabel}</span>
+              <span className="sm:hidden">Copy</span>
             </button>
           </div>
         </div>
@@ -153,6 +159,12 @@ export function MessageCard({
             </div>
           ) : content ? (
             <div className="whitespace-pre-wrap font-medium">
+              {subject && (
+                <div className="mb-6 pb-6 border-b border-white/5">
+                  <span className="text-[11px] font-black tracking-widest text-slate-500 uppercase">Subject: </span>
+                  <span className="text-slate-200 italic">{subject}</span>
+                </div>
+              )}
               <HighlightedMessage content={content} highlightTerms={highlightTerms} />
             </div>
           ) : (

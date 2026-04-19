@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { User, Save, Loader2, Camera } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface ProfileCardProps {
   userId: string;

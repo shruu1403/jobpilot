@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, Trash2, X, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface DeleteAccountModalProps {
   userId: string;

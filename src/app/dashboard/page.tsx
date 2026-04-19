@@ -85,42 +85,72 @@ function PlaceholderCard({
 }
 
 import RecentActivity from "@/components/dashboard/RecentActivity";
+import { useUser } from "@/hooks/useUser";
 
 export default function Dashboard() {
   const [insights, setInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(true);
+  const { user, loading: authLoading } = useUser();
+
+  const isGuest = !user && !authLoading;
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700">
-      {/* Hero Section */}
-      <ReadinessHero 
-        onInsightsLoaded={(data, isLoading) => {
-          setInsights(data);
-          setLoadingInsights(isLoading);
-        }}
-      />
-
-      {/* Main Content Grid: Priority Actions (60%) + AI Insights Placeholder (40%) */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-        <div className="lg:col-span-3">
-          <PriorityActions />
-        </div>
-        <div className="lg:col-span-2">
-          <AiInsights improvements={insights} loading={loadingInsights} />
-        </div>
-      </div>
-
-      {/* Bottom Grid: Matched Jobs (55%) + Recent Activity (45%) */}
-      <div className="grid grid-cols-1 lg:grid-cols-11 gap-8">
-        <div className="lg:col-span-6">
-          <MatchedJobsSection />
-        </div>
-        <div className="lg:col-span-5 flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl text-gray-400 font-bold tracking-widest uppercase mb-2">Recent Activity</h2>
+    <div className="max-w-[1400px] mx-auto relative animate-in fade-in duration-700">
+      
+      {/* ==== DEMO BANNER ==== */}
+      {isGuest && (
+        <div className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-500/20 rounded-full border border-blue-500/30">
+              <Activity size={18} className="text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Viewing Sample Dashboard</h3>
+              <p className="text-[12px] text-muted-text">This is mock data to give you an idea of the UI. Sign up to see your real insights.</p>
+            </div>
           </div>
-          <div className="flex-1">
-            <RecentActivity />
+          {/* <button
+            onClick={() => window.location.href = '/signup'}
+            className="whitespace-nowrap px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-blue-500/20"
+          >
+            Sign Up Now
+          </button> */}
+        </div>
+      )}
+
+      {/* ==== DASHBOARD CONTENT ==== */}
+      <div className="space-y-8">
+        {/* Hero Section */}
+        <ReadinessHero 
+          isDemo={isGuest}
+          onInsightsLoaded={(data, isLoading) => {
+            setInsights(data);
+            setLoadingInsights(isLoading);
+          }}
+        />
+
+        {/* Main Content Grid: Priority Actions (60%) + AI Insights Placeholder (40%) */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8">
+          <div className="lg:col-span-3">
+            <PriorityActions isDemo={isGuest} />
+          </div>
+          <div className="lg:col-span-2">
+            <AiInsights improvements={insights} loading={loadingInsights} />
+          </div>
+        </div>
+
+        {/* Bottom Grid: Matched Jobs (60%) + Recent Activity (40%) */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8">
+          <div className="lg:col-span-3">
+            <MatchedJobsSection isDemo={isGuest} />
+          </div>
+          <div className="lg:col-span-2 flex flex-col space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl text-gray-400 font-bold tracking-widest uppercase mb-2">Recent Activity</h2>
+            </div>
+            <div className="flex-1">
+              <RecentActivity isDemo={isGuest} />
+            </div>
           </div>
         </div>
       </div>

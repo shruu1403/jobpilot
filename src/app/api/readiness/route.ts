@@ -1,42 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
-const MODEL_PRIORITY = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-2.0-flash",
-];
-
-async function callGemini(prompt: string): Promise<string> {
-  let lastError: any;
-
-  for (const modelName of MODEL_PRIORITY) {
-    try {
-      console.log(`[Readiness] Trying model: ${modelName}`);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      console.log(`[Readiness] Success with model: ${modelName}`);
-      return response.text();
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.status;
-      if (status === 429 || status === 404) {
-        console.warn(`[Readiness] Model ${modelName} failed (${status}). Trying next...`);
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  const is429 = lastError?.status === 429 || lastError?.message?.includes("429");
-  if (is429) {
-    throw new Error("API rate limit reached. Please wait and try again.");
-  }
-  throw lastError || new Error("All models failed.");
-}
+import { callGemini, extractJson } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
@@ -84,13 +47,10 @@ EVALUATION RULES:
 - If no analysis has been done, evaluate purely from resume quality.
 - Strict JSON only, no HTML, no markdown fences.`;
 
-    const text = await callGemini(prompt);
+    const text = await callGemini(prompt, { label: "Readiness", timeoutMs: 20_000 });
 
     try {
-      const jsonStart = text.indexOf("{");
-      const jsonEnd = text.lastIndexOf("}") + 1;
-      const jsonText = text.substring(jsonStart, jsonEnd);
-      const result = JSON.parse(jsonText);
+      const result = extractJson(text);
 
       return NextResponse.json({
         readiness: Math.min(100, Math.max(0, result.readiness ?? 50)),
@@ -106,8 +66,11 @@ EVALUATION RULES:
     }
   } catch (error: any) {
     console.error("[Readiness] API Error:", error);
+    const isTimeout = error?.message?.includes("Timed out");
     const is429 = error?.status === 429 || error?.message?.includes("429");
-    const msg = is429
+    const msg = isTimeout
+      ? "Readiness check is taking too long. Please try again."
+      : is429
       ? "API rate limit reached. Please wait and try again."
       : `Readiness computation failed: ${error.message || "Unknown error"}`;
     return NextResponse.json({ error: msg }, { status: is429 ? 429 : 500 });

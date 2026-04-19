@@ -34,7 +34,7 @@ const features = [
     color: "#3B82F6",
     path: "/resumes",
     pos: { x: -220, y: -170 },
-    mPos: { x: -120, y: -130 },
+    mPos: { x: -90, y: -140 },
   },
   {
     icon: Target,
@@ -46,7 +46,7 @@ const features = [
     color: "#8B5CF6",
     path: "/analyzer",
     pos: { x: 220, y: -170 },
-    mPos: { x: 120, y: -130 },
+    mPos: { x: 90, y: -140 },
   },
   {
     icon: BarChart3,
@@ -58,7 +58,7 @@ const features = [
     color: "#06B6D4",
     path: "/jobs",
     pos: { x: 220, y: 170 },
-    mPos: { x: 120, y: 130 },
+    mPos: { x: 90, y: 140 },
   },
   {
     icon: MessageSquare,
@@ -70,7 +70,7 @@ const features = [
     color: "#10B981",
     path: "/referrals",
     pos: { x: -220, y: 170 },
-    mPos: { x: -120, y: 130 },
+    mPos: { x: -90, y: 140 },
   },
 ];
 
@@ -107,11 +107,15 @@ export default function LandingPage() {
   const glowCtrl = useAnimation();
   const alive = useRef(true);
 
-  /* ── Boot ──────────────────────────────────── */
-
   useEffect(() => {
+    alive.current = true;
     const mob = window.innerWidth < 768;
-    setMobile(mob);
+    const handleResize = () => {
+      setMobile(window.innerWidth < 768);
+    };
+    
+    handleResize();
+    window.addEventListener("resize", handleResize);
 
     // Stars
     setStars(
@@ -157,6 +161,7 @@ export default function LandingPage() {
     setReady(true);
     return () => {
       alive.current = false;
+      window.removeEventListener("resize", handleResize);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -248,14 +253,15 @@ export default function LandingPage() {
   /* ══════════════════════════════════════════════ */
 
   return (
-    <div
+    <main
       style={{
         position: "fixed",
         inset: 0,
         background: "#0B1220",
-        overflow: "hidden",
+        overflowX: "hidden",
+        overflowY: mobile ? "auto" : "hidden",
         display: "flex",
-        alignItems: "center",
+        alignItems: mobile ? "flex-start" : "center",
         justifyContent: "center",
         zIndex: 100,
         fontFamily: "inherit",
@@ -358,8 +364,14 @@ export default function LandingPage() {
                           animate={{ opacity: 1, scale: 1, x: target.x, y: target.y }}
                         >
                            <div style={{ transform: "translate(-50%, -50%)" }}>
-                              <div style={{ padding: 12, borderRadius: 12, background: `${f.color}20`, border: `1px solid ${f.color}40`, backdropFilter: "blur(12px)" }}>
-                                 <f.icon size={24} color={f.color} />
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                                <div style={{ padding: 16, borderRadius: 16, background: `${f.color}25`, border: `1px solid ${f.color}40`, backdropFilter: "blur(16px)" }}>
+                                   <f.icon size={28} color={f.color} />
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: 140 }}>
+                                  <span style={{ color: "white", fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{f.title}</span>
+                                  <span style={{ color: "#94A3B8", fontSize: 10, fontWeight: 600 }}>{f.hoverLine}</span>
+                                </div>
                               </div>
                            </div>
                         </motion.div>
@@ -400,13 +412,14 @@ export default function LandingPage() {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              height: "100vh",
+              minHeight: "100vh",
+              height: mobile ? "auto" : "100vh",
               width: "100%",
-              padding: mobile ? "24px 20px" : "32px",
+              padding: mobile ? "60px 20px 40px" : "32px",
               textAlign: "center",
               position: "relative",
               zIndex: 10,
-              gap: mobile ? 20 : 40,
+              gap: mobile ? 24 : 40,
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -492,7 +505,7 @@ export default function LandingPage() {
             <div style={{ maxWidth: 900, width: "100%" }}>
               <motion.h1
                 style={{
-                  fontSize: mobile ? "2.1rem" : "4.3rem",
+                  fontSize: "clamp(2rem, 8vw, 4.3rem)",
                   fontWeight: 900,
                   lineHeight: 1.15,
                   letterSpacing: "-0.04em",
@@ -542,7 +555,7 @@ export default function LandingPage() {
             <motion.div
               style={{
                 display: "grid",
-                gridTemplateColumns: mobile ? "1fr" : "repeat(4, 1fr)",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                 gap: 16,
                 maxWidth: 1100,
                 width: "100%",
@@ -583,7 +596,7 @@ export default function LandingPage() {
                       <f.icon size={18} color={f.color} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <h3 style={{ fontSize: 13, fontWeight: 800, color: "white", marginBottom: 2 }}>{f.title}</h3>
+                      <h2 style={{ fontSize: 13, fontWeight: 800, color: "white", marginBottom: 2 }}>{f.title}</h2>
                       <p style={{ fontSize: 10, color: "#64748B", fontWeight: 600 }}>{f.hoverLine}</p>
                     </div>
                   </motion.div>
@@ -604,7 +617,7 @@ export default function LandingPage() {
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.6, delay: 0.65 }}
             >
-              <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ display: "flex", gap: 16, flexDirection: "row", flexWrap: "wrap", justifyContent: "center" }}>
                 <motion.div
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -678,6 +691,6 @@ export default function LandingPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </main>
   );
 }

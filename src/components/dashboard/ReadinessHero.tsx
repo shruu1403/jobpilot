@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabaseClient";
-import { Sparkles, Upload, ArrowRight, Loader2, TrendingUp, AlertTriangle } from "lucide-react";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import { Sparkles, Upload, ArrowRight, Loader2, TrendingUp, AlertTriangle, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
+import rocketLogo from "@/assets/rocket.png";
 
 interface ReadinessData {
   readiness: number;
@@ -128,30 +131,67 @@ function useAnimatedCounter(target: number, duration = 1500) {
 
 export default function ReadinessHero({
   onInsightsLoaded,
+  isDemo,
 }: {
   onInsightsLoaded?: (improvements: string[], loading: boolean) => void;
+  isDemo?: boolean;
 }) {
   const { user, userName, loading: userLoading } = useUser();
   const [data, setData] = useState<ReadinessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const hasFetched = useRef(false);
+  const [isSlow, setIsSlow] = useState(false);
 
   const fetchReadiness = useCallback(async (userId: string) => {
     try {
       setLoading(true);
       setError(null);
+      setIsSlow(false);
       if (onInsightsLoaded) onInsightsLoaded([], true);
 
-      // 1. Fetch latest resume
-      const { data: resumes } = await supabase
-        .from("resumes")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1);
+      // Show "taking longer" indicator after 8s
+      const slowTimer = setTimeout(() => setIsSlow(true), 8000);
+
+      if (isDemo) {
+        clearTimeout(slowTimer);
+        const demoData = {
+          readiness: 85,
+          summary: "Your resume shows strong alignment with your target roles—adding a portfolio link can help you stand out even more.",
+          improvements: ["Add a portfolio link", "Quantify your impacts", "Highlight Next.js experience", "Gain more context on React Server Components", "Focus on clean architecture"]
+        };
+        setData(demoData);
+        setLoading(false);
+        if (onInsightsLoaded) onInsightsLoaded(demoData.improvements, false);
+        return;
+      }
+
+      // 1. Fetch resume + analysis + cached insight IN PARALLEL
+      const [resumeResult, analysisResult, insightResult] = await Promise.all([
+        supabase
+          .from("resumes")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1),
+        supabase
+          .from("analyses")
+          .select("id, match_score, skill_gaps, suggestions")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1),
+        supabase
+          .from("dashboard_insights")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle(),
+      ]);
+
+      const resumes = resumeResult.data;
+      const analyses = analysisResult.data;
+      const cachedInsight = insightResult.data;
 
       if (!resumes || resumes.length === 0) {
+        clearTimeout(slowTimer);
         const emptyData = {
           readiness: 0,
           summary: "Upload your resume to see your job readiness score. Let's get started!",
@@ -164,30 +204,16 @@ export default function ReadinessHero({
       }
 
       const latestResume = resumes[0];
-
-      // 2. Fetch latest analysis (if exists)
-      const { data: analyses } = await supabase
-        .from("analyses")
-        .select("id, match_score, skill_gaps, suggestions")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
       const latestAnalysis = analyses && analyses.length > 0 ? analyses[0] : null;
 
-      // 3. Check for cached insight with matching inputs
-      const { data: cachedInsight } = await supabase
-        .from("dashboard_insights")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
-
+      // 2. Check cache validity
       const isCacheValid = 
         cachedInsight && 
         cachedInsight.source_resume_id === latestResume.id && 
         cachedInsight.source_analysis_id === (latestAnalysis?.id ?? null);
 
       if (isCacheValid) {
+        clearTimeout(slowTimer);
         console.log("[ReadinessHero] Using cached insight (inputs haven't changed)");
         const cachedData = {
           readiness: cachedInsight.readiness,
@@ -202,7 +228,7 @@ export default function ReadinessHero({
 
       console.log("[ReadinessHero] Cache miss or inputs changed. Requesting new AI calculation...");
 
-      // 4. Extract resume text
+      // 3. Extract resume text
       const { data: fileData, error: dlError } = await supabase.storage
         .from("resumes")
         .download(latestResume.file_path);
@@ -213,13 +239,13 @@ export default function ReadinessHero({
 
       const formData = new FormData();
       formData.append("file", fileData);
-      const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
+      const extractRes = await fetchWithTimeout("/api/extract", { method: "POST", body: formData }, 15_000);
       const extractData = await extractRes.json();
 
       if (extractData.error) throw new Error(extractData.error);
 
-      // 5. Call Gemini via our API
-      const readinessRes = await fetch("/api/readiness", {
+      // 4. Call readiness AI — with timeout
+      const readinessRes = await fetchWithTimeout("/api/readiness", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -227,7 +253,9 @@ export default function ReadinessHero({
           matchScore: latestAnalysis?.match_score ?? null,
           skillGaps: latestAnalysis?.skill_gaps ?? [],
         }),
-      });
+      }, 25_000);
+
+      clearTimeout(slowTimer);
 
       const readinessData = await readinessRes.json();
 
@@ -236,7 +264,7 @@ export default function ReadinessHero({
       setData(readinessData);
       if (onInsightsLoaded) onInsightsLoaded(readinessData.improvements, false);
 
-      // 6. Cache the result in Supabase
+      // 5. Cache the result in Supabase (non-blocking)
       try {
         // Upsert: delete old row, insert new
         await supabase
@@ -263,8 +291,12 @@ export default function ReadinessHero({
       }
     } catch (err: any) {
       console.error("[ReadinessHero] Error:", err);
-      setError(err.message || "Something went wrong");
-      // Provide fallback data
+      const isTimeout = err?.isTimeout || err?.message?.includes("timed out");
+      setError(isTimeout 
+        ? "AI is taking too long — please retry" 
+        : err.message || "Something went wrong"
+      );
+      // Provide fallback data so UI doesn't stay empty
       const fallbackData = {
         readiness: 0,
         summary: "We couldn't compute your readiness right now. Please try again later.",
@@ -274,15 +306,20 @@ export default function ReadinessHero({
       if (onInsightsLoaded) onInsightsLoaded(fallbackData.improvements, false);
     } finally {
       setLoading(false);
+      setIsSlow(false);
     }
   }, [onInsightsLoaded]);
 
   useEffect(() => {
-    if (user?.id && !hasFetched.current) {
-      hasFetched.current = true;
+    if (isDemo) {
+      fetchReadiness("demo");
+      return;
+    }
+    if (user?.id) {
       fetchReadiness(user.id);
     }
-  }, [user, fetchReadiness]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isDemo]);
 
   const isNew = data?.readiness === 0 && !error;
 
@@ -327,7 +364,13 @@ export default function ReadinessHero({
                 transition={{ duration: 0.5, delay: 0.1 }}
                 className="text-3xl md:text-4xl font-black text-white tracking-tight"
               >
-                Hi {userName} <span className="inline-block animate-wave">👋</span>
+                Hi {isDemo ? "Alex" : userName}{" "}
+                <Image 
+                  src={rocketLogo} 
+                  alt="JobPilot Rocket" 
+                  className="inline-block w-8 h-8 md:w-10 md:h-10 ml-1 object-contain scale-[1.3] md:scale-150 origin-bottom" 
+                  priority
+                />
               </motion.h1>
             )}
           </AnimatePresence>
@@ -344,16 +387,36 @@ export default function ReadinessHero({
               >
                 <div className="h-4 w-full max-w-md bg-white/5 rounded-lg animate-pulse" />
                 <div className="h-4 w-3/4 max-w-sm bg-white/5 rounded-lg animate-pulse" />
+                {/* "Taking longer" indicator */}
+                {isSlow && (
+                  <motion.p
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-[11px] text-amber-400/80 font-medium mt-3 flex items-center gap-1.5"
+                  >
+                    <Loader2 size={12} className="animate-spin" />
+                    AI is processing — hang tight...
+                  </motion.p>
+                )}
               </motion.div>
             ) : error ? (
               <motion.div
                 key="error-msg"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2 text-amber-400 text-sm font-medium"
+                className="flex items-center gap-3"
               >
-                <AlertTriangle size={16} />
-                <span>{error}</span>
+                <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
+                  <AlertTriangle size={16} />
+                  <span>{error}</span>
+                </div>
+                <button
+                  onClick={() => user?.id && fetchReadiness(user.id)}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-xs font-black uppercase tracking-wider rounded-xl transition-all hover:scale-105 active:scale-95"
+                >
+                  <RefreshCw size={12} />
+                  Retry
+                </button>
               </motion.div>
             ) : (
               <motion.p
@@ -415,6 +478,13 @@ export default function ReadinessHero({
           {loading ? (
             <div className="w-[180px] h-[180px] rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
               <Loader2 size={32} className="text-muted-text animate-spin" />
+            </div>
+          ) : isNew ? (
+            <div className="w-[180px] h-[180px] rounded-full bg-white/[0.02] border-2 border-dashed border-white/20 flex flex-col items-center justify-center hover:border-blue-400/40 transition-colors">
+              <Upload size={32} className="text-white/40 mb-3" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-white/50">
+                Start Here
+              </span>
             </div>
           ) : (
             <ProgressRing progress={data?.readiness ?? 0} />

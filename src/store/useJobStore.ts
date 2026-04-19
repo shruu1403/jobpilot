@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Job, JobStatus } from '../types/job';
 import { supabase } from '@/lib/supabaseClient';
-import toast from 'react-hot-toast';
+import { toast } from "@/lib/toast";
 import { logActivity } from '@/services/activityLogs';
 
 interface JobStore {

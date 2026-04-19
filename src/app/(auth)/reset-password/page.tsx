@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import toast from 'react-hot-toast';
+import { toast } from "@/lib/toast";
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Lock, Loader2, Eye, EyeOff, Zap } from 'lucide-react';

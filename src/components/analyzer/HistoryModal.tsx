@@ -15,7 +15,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface HistoryModalProps {
   isOpen: boolean;

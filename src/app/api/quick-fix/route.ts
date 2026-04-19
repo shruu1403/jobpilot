@@ -1,31 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
-const MODEL_PRIORITY = [
-  "gemini-3.1-flash-lite-preview",
-  "gemini-2.0-flash-lite",
-  "gemini-2.5-flash-lite",
-  "gemini-2.0-flash",
-];
-
-async function callGemini(prompt: string): Promise<string> {
-  let lastError: any;
-  for (const modelName of MODEL_PRIORITY) {
-    try {
-      console.log(`[QuickFix] Trying model: ${modelName}`);
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      return result.response.text();
-    } catch (err: any) {
-      lastError = err;
-      if (err?.status === 429 || err?.status === 404) continue;
-      throw err;
-    }
-  }
-  throw lastError || new Error("All models failed.");
-}
+import { callGemini, extractJson } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
@@ -169,12 +143,11 @@ CRITICAL:
 - ALL URLs must be copied verbatim from the input resume. NEVER fabricate a URL.
 - If a link is missing "https://", prepend it.`;
 
-    const text = await callGemini(prompt);
+    // Longer timeout for this heavy prompt
+    const text = await callGemini(prompt, { label: "QuickFix", timeoutMs: 35_000 });
 
     try {
-      const jsonStart = text.indexOf("{");
-      const jsonEnd = text.lastIndexOf("}") + 1;
-      const parsed = JSON.parse(text.substring(jsonStart, jsonEnd));
+      const parsed = extractJson(text);
 
       return NextResponse.json({
         header: parsed.header || {},
@@ -193,9 +166,10 @@ CRITICAL:
     }
   } catch (error: any) {
     console.error("[QuickFix] Error:", error);
+    const isTimeout = error?.message?.includes("Timed out");
     const is429 = error?.status === 429 || error?.message?.includes("429");
     return NextResponse.json(
-      { error: is429 ? "Rate limit reached. Wait 60s." : `Failed: ${error.message}` },
+      { error: isTimeout ? "Resume optimization timed out — please try again." : is429 ? "Rate limit reached. Wait 60s." : `Failed: ${error.message}` },
       { status: is429 ? 429 : 500 }
     );
   }

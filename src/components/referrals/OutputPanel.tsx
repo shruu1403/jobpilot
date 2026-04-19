@@ -1,7 +1,7 @@
 "use client";
 
 import { Mail, MessageSquareText, Sparkles } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { MessageCard } from "@/components/referrals/MessageCard";
 import type { ReferralResponse } from "@/types/referral";
 

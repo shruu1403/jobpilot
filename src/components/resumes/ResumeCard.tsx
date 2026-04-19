@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { getSignedUrl } from "@/services/viewResume";
 import { updateResumeStatus } from "@/services/updateResumeStatus";
 import { useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface ResumeCardProps {
   resume: Resume;

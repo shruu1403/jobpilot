@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabaseClient";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -233,7 +234,7 @@ function generateActions(data: ActionSourceData): PriorityAction[] {
     const companies = highMatchJobs
       .slice(0, 3)
       .map((j) => j.company)
-      .filter((c: string, i: number, arr: string[]) => arr.indexOf(c) === i)
+      .filter((c, i, arr) => c && arr.indexOf(c) === i)
       .join(", ");
     actions.push({
       id: "apply-jobs",
@@ -365,26 +366,61 @@ function ActionSkeleton({ index }: { index: number }) {
 // ---------------------
 // Main Component
 // ---------------------
-export default function PriorityActions() {
+export default function PriorityActions({ isDemo }: { isDemo?: boolean }) {
   const { user } = useUser();
   const [actions, setActions] = useState<PriorityAction[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasFetched = useRef(false);
 
   const fetchAndGenerate = useCallback(async (userId: string) => {
     try {
       setLoading(true);
 
-      // 1. Fetch source data directly via authenticated logic
-      const { data: resumes } = await supabase.from("resumes").select("id").eq("user_id", userId).limit(1);
-      const hasResume = !!(resumes && resumes.length > 0);
+      if (isDemo) {
+        setActions([
+          {
+            id: "demo-1",
+            type: "missing_skills",
+            icon: "code",
+            title: "Add missing skills: React, TypeScript",
+            description: "Top requirement for your matching roles",
+            route: "/signup",
+            priority: 1,
+          },
+          {
+            id: "demo-2",
+            type: "resume_improvement",
+            icon: "chart",
+            title: "Improve your resume impact",
+            description: "Quantify your achievements with exact metrics to stand out",
+            route: "/signup",
+            priority: 2,
+          },
+          {
+            id: "demo-3",
+            type: "apply_jobs",
+            icon: "play",
+            title: "Apply to 3 matching jobs",
+            description: "Recommended companies: Stripe, Vercel, Meta",
+            route: "/signup",
+            priority: 3,
+          }
+        ]);
+        setLoading(false);
+        return;
+      }
 
-      const { data: analyses } = await supabase.from("analyses").select("id, match_score, skill_gaps, suggestions").eq("user_id", userId).order("created_at", { ascending: false }).limit(1);
-      const latestAnalysis = analyses && analyses.length > 0 ? analyses[0] : null;
+      // 1. Fetch ALL source data in PARALLEL
+      const [resumeResult, analysisResult, jobsResult] = await Promise.all([
+        supabase.from("resumes").select("id").eq("user_id", userId).limit(1),
+        supabase.from("analyses").select("id, match_score, skill_gaps, suggestions").eq("user_id", userId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("jobs").select("id, company, status, applied_date").eq("user_id", userId).order("created_at", { ascending: false }),
+      ]);
 
-      const { data: jobs } = await supabase.from("jobs").select("id, company, status, applied_date").eq("user_id", userId).order("created_at", { ascending: false });
-      const highMatchJobs = (jobs || []).filter((j) => j.status === "saved" || j.status === "Saved" || j.status === "wishlist");
-      const appliedJobs = (jobs || []).filter((j) => j.status === "applied" || j.status === "Applied");
+      const hasResume = !!(resumeResult.data && resumeResult.data.length > 0);
+      const latestAnalysis = analysisResult.data && analysisResult.data.length > 0 ? analysisResult.data[0] : null;
+      const jobs = jobsResult.data || [];
+      const highMatchJobs = jobs.filter((j) => j.status === "saved" || j.status === "Saved" || j.status === "wishlist");
+      const appliedJobs = jobs.filter((j) => j.status === "applied" || j.status === "Applied");
       const lastApplicationDate = appliedJobs.length > 0 ? appliedJobs[0].applied_date : null;
 
       // 2. Generate static rule-based actions with REAL DATA
@@ -408,55 +444,46 @@ export default function PriorityActions() {
       // 4. Check DB Cache
       const { data: cached } = await supabase.from("priority_actions").select("*").eq("user_id", userId).maybeSingle();
 
-      // IMPORTANT FOR TESTING: Even if cached matches, we skip returning it right here 
-      // so we FORCE it to hit the AI again on refresh (so you see AI variations).
-      // If we wanted it fully optimized, we'd uncomment the lines below:
       if (cached && cached.source_hash === sourceHash) {
         setActions(ensureMinimumActions(cached.actions || [], { hasResume, latestAnalysis, highMatchJobs, lastApplicationDate }));
         setLoading(false);
         return;
       }
 
-      // 5. Ask Gemini AI API to refine it
+      // 5. Ask Gemini AI API to refine — WITH TIMEOUT + FALLBACK
       let finalActions = rawActions;
       try {
-        const aiRes = await fetch("/api/priority-actions", {
+        const aiRes = await fetchWithTimeout("/api/priority-actions", {
           method: "POST",
           body: JSON.stringify({ actions: rawActions }),
           headers: { "Content-Type": "application/json" }
-        });
+        }, 18_000);
+        
         const aiData = await aiRes.json();
         if (aiData.actions && Array.isArray(aiData.actions)) {
            finalActions = aiData.actions;
         }
       } catch(err) {
-        console.warn("AI failed to refine, using raw actions", err);
+        console.warn("[PriorityActions] AI refinement timed out or failed, using raw actions", err);
+        // Graceful fallback — raw actions are already good enough
       }
 
       finalActions = ensureMinimumActions(finalActions, { hasResume, latestAnalysis, highMatchJobs, lastApplicationDate });
 
-      // 6. Store AI result in Supabase DB!
-      if (cached) {
-         const { error: updateErr } = await supabase
-           .from("priority_actions")
-           .update({ actions: finalActions, source_hash: sourceHash, updated_at: new Date().toISOString() })
-           .eq("user_id", userId);
-           
-         if (updateErr) {
-             console.error("Supabase Update Error:", updateErr);
-         } else {
-             console.log("Successfully updated priority_actions in DB!");
-         }
-      } else {
-         const { error: insertErr } = await supabase
-           .from("priority_actions")
-           .insert({ user_id: userId, actions: finalActions, source_hash: sourceHash });
-           
-         if (insertErr) {
-             console.error("Supabase Insert Error:", insertErr);
-         } else {
-             console.log("Successfully inserted priority_actions into DB!");
-         }
+      // 6. Store AI result in Supabase DB (non-blocking)
+      try {
+        if (cached) {
+           await supabase
+             .from("priority_actions")
+             .update({ actions: finalActions, source_hash: sourceHash, updated_at: new Date().toISOString() })
+             .eq("user_id", userId);
+        } else {
+           await supabase
+             .from("priority_actions")
+             .insert({ user_id: userId, actions: finalActions, source_hash: sourceHash });
+        }
+      } catch (dbErr) {
+        console.warn("[PriorityActions] DB cache write failed:", dbErr);
       }
 
       setActions(finalActions);
@@ -485,11 +512,15 @@ export default function PriorityActions() {
   }, []);
 
   useEffect(() => {
-    if (user?.id && !hasFetched.current) {
-      hasFetched.current = true;
+    if (isDemo) {
+      fetchAndGenerate("demo");
+      return;
+    }
+    if (user?.id) {
       fetchAndGenerate(user.id);
     }
-  }, [user, fetchAndGenerate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isDemo]);
 
   return (
     <motion.div
