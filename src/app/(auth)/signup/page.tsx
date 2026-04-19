@@ -31,7 +31,7 @@ export default function Signup() {
     );
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
-        router.push('/dashboard');
+        router.replace('/dashboard');
       }
     });
   }, [router]);

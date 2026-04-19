@@ -31,7 +31,7 @@ export default function Login() {
     );
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
-        router.push('/dashboard');
+        router.replace('/dashboard');
       }
     });
   }, [router]);
@@ -51,7 +51,7 @@ export default function Login() {
       toast.error(error.message);
     } else {
       toast.success('Welcome to JobPilot!');
-      router.push('/dashboard');
+      router.replace('/dashboard');
     }
     setLoading(false);
   };
