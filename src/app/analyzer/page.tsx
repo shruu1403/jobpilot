@@ -338,7 +338,7 @@ export default function AnalyzerPage() {
       const isTimeout = error && typeof error === 'object' && 'isTimeout' in error;
       const msg = isTimeout 
         ? "AI is busy. Please try again." 
-        : getErrorMessage(error, "Generation failed");
+        : (error instanceof Error ? error.message : error?.message || "Generation failed");
       toast.error(msg);
     } finally {
       setGeneratingLetter(false);
