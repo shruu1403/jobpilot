@@ -100,12 +100,36 @@ export default function AnalyzerPage() {
   };
 
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const storedData = localStorage.getItem(`jobpilot_quota_${user?.id || "guest"}`);
-    if (storedData) {
-      const { date, count } = JSON.parse(storedData);
-      setDailyAnalyses(date === today ? count : 0);
-    }
+    const fetchUsage = async () => {
+      const today = new Date().toISOString().split("T")[0];
+      
+      if (user) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const { count, error } = await supabase
+          .from("analyses")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", todayStart.toISOString())
+          .lte("created_at", todayEnd.toISOString());
+
+        if (!error) {
+          setDailyAnalyses(count || 0);
+        }
+      } else {
+        const storedData = localStorage.getItem("jobpilot_quota_guest");
+        if (storedData) {
+          const { date, count } = JSON.parse(storedData);
+          setDailyAnalyses(date === today ? count : 0);
+        } else {
+          setDailyAnalyses(0);
+        }
+      }
+    };
+    fetchUsage();
   }, [user]);
 
   // Handle auto-selection of resume from library redirect
@@ -131,13 +155,17 @@ export default function AnalyzerPage() {
   }, [user, searchParams, hasAutoSelected]);
 
   const incrementQuota = () => {
-    const today = new Date().toISOString().split("T")[0];
-    const newCount = dailyAnalyses + 1;
-    setDailyAnalyses(newCount);
-    localStorage.setItem(
-      `jobpilot_quota_${user?.id || "guest"}`,
-      JSON.stringify({ date: today, count: newCount })
-    );
+    setDailyAnalyses((prev) => {
+      const newCount = prev + 1;
+      if (!user) {
+        const today = new Date().toISOString().split("T")[0];
+        localStorage.setItem(
+          "jobpilot_quota_guest",
+          JSON.stringify({ date: today, count: newCount })
+        );
+      }
+      return newCount;
+    });
   };
 
   const isRedundant = selectedResume?.id === lastAnalyzedResumeId && jobDescription === lastAnalyzedJD;
@@ -517,11 +545,23 @@ export default function AnalyzerPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-12 xl:col-span-4 space-y-6 transition-all duration-1000">
+        <div className="lg:col-span-12 xl:col-span-4 space-y-6 transition-all duration-1000 xl:mt-[0rem]">
           <MatchScoreCard score={matchScore} reason={analysisReason} loading={analyzing} />
-          <SkillGapsCard gaps={skillGaps} active={analysisComplete} />
-          <SuggestionsCard suggestions={suggestions} active={analysisComplete} />
+          
+          {/* Placeholder instances in sidebar before analysis begins */}
+          {(!analysisComplete && !analyzing) && (
+            <div className="space-y-6 animate-in fade-in zoom-in duration-500">
+              <SkillGapsCard gaps={[]} active={false} />
+              <SuggestionsCard suggestions={[]} active={false} />
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* AI Insights Section (Expanded below the main grid for better readability) */}
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 transition-all duration-1000 overflow-hidden ${analysisComplete || analyzing ? "opacity-100 max-h-[2000px] mt-8" : "opacity-0 max-h-0 mt-0"}`}>
+        <SkillGapsCard gaps={skillGaps} active={analysisComplete} />
+        <SuggestionsCard suggestions={suggestions} active={analysisComplete} />
       </div>
 
       {/* NEW: Secondary Features Section (Visible after Analyze) */}
@@ -580,9 +620,6 @@ export default function AnalyzerPage() {
         <div className="bg-[#111827] border border-white/5 rounded-[28px] sm:rounded-[40px] p-6 sm:p-10 flex flex-col relative overflow-hidden group h-fit">
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4 sm:gap-6 z-10 relative">
             <div className="space-y-4 max-w-sm">
-              <div className="w-12 h-12 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400">
-                <FileEdit size={24} />
-              </div>
               <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">Quick Fix (ATS)</h3>
 
               {atsIssues.length > 0 && !fixedResume && (

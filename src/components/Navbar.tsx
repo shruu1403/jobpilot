@@ -109,53 +109,50 @@ export function Navbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
         {/* Divider */}
         <div className="w-[1px] h-6 bg-sidebar-border hidden sm:block" />
 
-        {/* User Profile */}
-        <div className="relative" ref={dropdownRef}>
-          <div 
-            className="flex items-center gap-3 cursor-pointer group"
-            onClick={() => setShowDropdown(!showDropdown)}
-          >
-            <div className="hidden sm:flex flex-col items-end mr-1">
-              <span className="text-[13px] font-semibold text-white leading-tight group-hover:text-accent-blue transition-colors">
-                {loading ? "..." : userName}
-              </span>
-              {userRole && (
-                <span className="text-[10px] font-medium text-muted-text leading-tight mt-0.5">
-                  {userRole}
+        {/* User Profile — authenticated users get avatar + logout dropdown */}
+        {isAuthenticated && (
+          <div className="relative" ref={dropdownRef}>
+            <div 
+              className="flex items-center gap-3 cursor-pointer group"
+              onClick={() => setShowDropdown(!showDropdown)}
+            >
+              <div className="hidden sm:flex flex-col items-end mr-1">
+                <span className="text-[13px] font-semibold text-white leading-tight group-hover:text-accent-blue transition-colors">
+                  {loading ? "..." : userName}
                 </span>
-              )}
-            </div>
-            
-            <button className="p-1 rounded-full border-2 border-accent-blue/40 group-hover:border-accent-blue transition-colors duration-300 overflow-hidden">
-              <div className="w-9 h-9 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={userName} className="w-full h-full object-cover" />
-                ) : (
-                  <User size={20} className="text-accent-blue" />
+                {userRole && (
+                  <span className="text-[10px] font-medium text-muted-text leading-tight mt-0.5">
+                    {userRole}
+                  </span>
                 )}
               </div>
-            </button>
-          </div>
-
-          {/* Logout Dropdown */}
-          {showDropdown && (
-            <div className="absolute top-full right-0 mt-3 w-48 bg-[#111827] border border-white/5 rounded-2xl shadow-2xl z-50 p-2 overflow-hidden animate-in fade-in zoom-in duration-200">
-              {/* <div className="px-4 py-3 border-b border-white/5 mb-1">
-                <p className="text-[10px] font-black text-muted-text uppercase tracking-widest leading-none mb-1">Account Info</p>
-                <p className="text-xs font-bold text-white line-clamp-1">{userName}</p>
-              </div> */}
               
-              <button 
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-red-500 rounded-xl transition-all group/logout ${loggingOut ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500/10'}`}
-              >
-                <LogOut size={16} className={`transition-transform ${!loggingOut && 'group-hover/logout:-translate-x-1'}`} />
-                <span className="text-[11px] font-black tracking-widest uppercase">{loggingOut ? "Logging out..." : "Logout"}</span>
+              <button className="p-1 rounded-full border-2 border-accent-blue/40 group-hover:border-accent-blue transition-colors duration-300 overflow-hidden">
+                <div className="w-9 h-9 rounded-full bg-accent-blue/20 flex items-center justify-center overflow-hidden">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={userName} className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={20} className="text-accent-blue" />
+                  )}
+                </div>
               </button>
             </div>
-          )}
-        </div>
+
+            {/* Logout Dropdown */}
+            {showDropdown && (
+              <div className="absolute top-full right-0 mt-3 w-48 bg-[#111827] border border-white/5 rounded-2xl shadow-2xl z-50 p-2 overflow-hidden animate-in fade-in zoom-in duration-200">
+                <button 
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-red-500 rounded-xl transition-all group/logout ${loggingOut ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500/10'}`}
+                >
+                  <LogOut size={16} className={`transition-transform ${!loggingOut && 'group-hover/logout:-translate-x-1'}`} />
+                  <span className="text-[11px] font-black tracking-widest uppercase">{loggingOut ? "Logging out..." : "Logout"}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

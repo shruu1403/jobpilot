@@ -1,74 +1,100 @@
-import { useEffect, useState, useCallback } from 'react';
+import { create } from 'zustand';
 import { supabase } from '@/lib/supabaseClient';
 import { User } from '@supabase/supabase-js';
 
-export function useUser() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [profileRole, setProfileRole] = useState('');
-  const [profileName, setProfileName] = useState('');
-  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+interface UserState {
+  user: User | null;
+  loading: boolean;
+  profileRole: string;
+  profileName: string;
+  profileAvatar: string | null;
+  setUser: (user: User | null) => void;
+  setLoading: (loading: boolean) => void;
+  setProfileData: (data: { role: string; name: string; avatar: string | null }) => void;
+  fetchProfile: (userId: string) => Promise<void>;
+}
 
-  const fetchProfile = useCallback(async (userId: string) => {
+export const useUserStore = create<UserState>((set) => ({
+  user: null,
+  loading: true,
+  profileRole: '',
+  profileName: '',
+  profileAvatar: null,
+  setUser: (user) => set({ user }),
+  setLoading: (loading) => set({ loading }),
+  setProfileData: (data) => set({ profileRole: data.role, profileName: data.name, profileAvatar: data.avatar }),
+  fetchProfile: async (userId: string) => {
     try {
       const { data } = await supabase
         .from('profiles')
         .select('full_name, role, avatar_url')
         .eq('id', userId)
         .single();
-
+      
       if (data) {
-        setProfileName(data.full_name || '');
-        setProfileRole(data.role || '');
-        setProfileAvatar(data.avatar_url || null);
+        set({
+          profileName: data.full_name || '',
+          profileRole: data.role || '',
+          profileAvatar: data.avatar_url || null,
+        });
       }
     } catch {
       // Profile might not exist yet, that's okay
     }
-  }, []);
+  }
+}));
 
-  useEffect(() => {
-    // Check initial user
-    const fetchUser = async () => {
+// Initialize auth listener outside of hooks to ensure it only runs once per app lifecycle client-side
+let authListenerInitialized = false;
+
+function initAuthListener() {
+  if (typeof window === 'undefined' || authListenerInitialized) return;
+  authListenerInitialized = true;
+
+  const store = useUserStore.getState();
+
+  // Check initial user
+  const fetchUser = async () => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      store.setUser(user);
       if (user) {
-        await fetchProfile(user.id);
+        // Run profile fetch without blocking the initial render of user
+        store.fetchProfile(user.id);
       }
-      setLoading(false);
-    };
+    } finally {
+      store.setLoading(false);
+    }
+  };
 
-    fetchUser();
+  fetchUser();
 
-    // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        if (currentUser) {
-          await fetchProfile(currentUser.id);
-        }
-        setLoading(false);
-      }
-    );
+  // Listen for changes
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    const currentUser = session?.user ?? null;
+    useUserStore.getState().setUser(currentUser);
+    if (currentUser) {
+      await useUserStore.getState().fetchProfile(currentUser.id);
+    }
+    useUserStore.getState().setLoading(false);
+  });
 
-    // Listen for custom profile-updated event
-    const handleProfileUpdate = () => {
-      setUser((prevUser) => {
-        if (prevUser) {
-          fetchProfile(prevUser.id);
-        }
-        return prevUser;
-      });
-    };
+  // Custom profile update event
+  window.addEventListener('profile-updated', () => {
+    const currentUser = useUserStore.getState().user;
+    if (currentUser) {
+      useUserStore.getState().fetchProfile(currentUser.id);
+    }
+  });
+}
 
-    window.addEventListener('profile-updated', handleProfileUpdate);
+// Trigger initialization safely in the browser
+if (typeof window !== 'undefined') {
+  initAuthListener();
+}
 
-    return () => {
-      subscription.unsubscribe();
-      window.removeEventListener('profile-updated', handleProfileUpdate);
-    };
-  }, [fetchProfile]);
+export function useUser() {
+  const { user, loading, profileName, profileRole, profileAvatar, fetchProfile } = useUserStore();
 
   const userName = profileName ||
     user?.user_metadata?.full_name ||
@@ -86,5 +112,12 @@ export function useUser() {
       : null) ||
     null;
 
-  return { user, loading, userName, userRole, avatarUrl, refetchProfile: () => user ? fetchProfile(user.id) : Promise.resolve() };
+  return { 
+    user, 
+    loading, 
+    userName, 
+    userRole, 
+    avatarUrl, 
+    refetchProfile: () => user ? fetchProfile(user.id) : Promise.resolve() 
+  };
 }

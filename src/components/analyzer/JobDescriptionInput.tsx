@@ -43,6 +43,13 @@ export function JobDescriptionInput({
         body: JSON.stringify({ url: jobUrl }),
       });
 
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+         const text = await response.text();
+         console.error("Non-JSON API response:", text.slice(0, 200));
+         throw new Error("Server returned an invalid response. Please try manual copy-pasting.");
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -56,6 +63,8 @@ export function JobDescriptionInput({
       }
     } catch (error: any) {
       toast.error(error.message || "Error fetching URL");
+      // Clear URL input so the manual copy-paste box unlocks immediately upon failure
+      onUrlChange("");
     } finally {
       setFetching(false);
     }
@@ -98,7 +107,7 @@ export function JobDescriptionInput({
 
       <div className="space-y-4">
         {/* Main Textarea */}
-        <div className={`relative group ${isUrlMode ? 'opacity-20 pointer-events-none cursor-not-allowed transition-opacity' : 'transition-opacity'}`}>
+        <div className={`relative group ${isUrlMode ? 'opacity-70 pointer-events-none cursor-not-allowed transition-opacity' : 'transition-opacity'}`}>
           <textarea
             value={value}
             disabled={isUrlMode}
@@ -118,7 +127,7 @@ export function JobDescriptionInput({
         </div>
 
         {/* URL Fetch Tool */}
-        <div className={`bg-white/[0.02] border border-white/5 rounded-[32px] p-6 flex flex-col md:flex-row items-center gap-6 transition-opacity ${isManualMode ? 'opacity-20 pointer-events-none' : ''}`}>
+        <div className={`bg-white/[0.02] border border-white/5 rounded-[32px] p-6 flex flex-col md:flex-row items-center gap-6 transition-opacity ${isManualMode ? 'opacity-90 pointer-events-none' : ''}`}>
           <div className="flex items-center gap-4 flex-1 w-full">
             <div className="p-3 bg-white/[0.03] rounded-2xl border border-white/5">
               <Globe size={20} className={isManualMode ? 'text-muted-text/30' : 'text-muted-text'} />

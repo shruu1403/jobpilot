@@ -13,8 +13,8 @@ export function KanbanColumn({ title, jobs, onAddClick }: KanbanColumnProps) {
   // Map title to color classes
   const headerColors: Record<JobStatus, string> = {
     Applied: 'text-indigo-400',
-    Interview: 'text-[#4ADE80]',
-    Offer: 'text-yellow-400',
+    Interview: 'text-yellow-400',
+    Offer: 'text-[#4ADE80]',
     Rejected: 'text-red-400'
   };
 

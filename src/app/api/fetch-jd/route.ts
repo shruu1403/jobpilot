@@ -187,33 +187,61 @@ async function tryPuppeteerFetch(url: string): Promise<string | null> {
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-blink-features=AutomationControlled",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--disable-gpu",
       ],
     });
 
     const page = await browser.newPage();
 
-    // Spoof to look like a real browser
+    // Smoother User Agent
     await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     );
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": "en-US,en;q=0.9",
+    });
+    
     await page.setViewport({ width: 1366, height: 768 });
 
-    // Navigate and wait for the page to fully render
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+    // Use a Promise.race to enforce a strict absolute outer timeout, averting Next.js crashes 
+    const timeoutPromise = new Promise<null>((_, reject) => 
+      setTimeout(() => reject(new Error("Puppeteer overall timeout")), 25000)
+    );
 
-    // Wait a bit extra for dynamic content
-    await new Promise((r) => setTimeout(r, 3000));
+    const runFetch = async () => {
+      // Navigate and wait for DOM layout but avoid waiting too tightly on network idle 
+      // because ad trackers can prevent networkidle2 from firing
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
 
-    const html = await page.content();
-    const text = extractJobText(html);
+      // Wait a bit for JS frameworks (React/Vue) to render text into the DOM
+      await new Promise((r) => setTimeout(r, 4000));
 
-    return text.length > 100 ? text : null;
+      const html = await page.content();
+      const lower = html.toLowerCase();
+      
+      // If we hit Cloudflare challenge or Datadome block
+      if (lower.includes("cf-browser-verification") || lower.includes("datadome") || lower.includes("please verify you are a human")) {
+        console.warn("Hit bot challenge in Puppeteer");
+        return null;
+      }
+
+      const text = extractJobText(html);
+      return text.length > 100 ? text : null;
+    };
+
+    return await Promise.race([runFetch(), timeoutPromise]);
   } catch (err) {
     console.error("Puppeteer fetch error:", err);
     return null;
   } finally {
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (e) {
+        console.error("Error closing browser:", e);
+      }
     }
   }
 }

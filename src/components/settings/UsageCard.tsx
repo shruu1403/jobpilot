@@ -212,8 +212,8 @@ export default function UsageCard({ userId }: UsageCardProps) {
 
   const jobStatusColors: Record<string, string> = {
     Applied: "#3B82F6",
-    Interview: "#8B5CF6",
-    Offer: "#10B981",
+    Interview: "#FACC15",
+    Offer: "#4ADE80",
     Rejected: "#EF4444",
   };
 

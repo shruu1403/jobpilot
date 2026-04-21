@@ -26,16 +26,17 @@ export function InsightsPanel() {
       value: interviews,
       subValue: `${getRate(interviews)}% rate`,
       icon: TrendingUp,
-      color: 'text-[#4ADE80]',
-      bgColor: 'bg-[#4ADE80]/10'
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-400/10'
     },
     {
       label: 'OFFERS',
       value: offers,
       subValue: `${getRate(offers)}% rate`,
       icon: Award,
-      color: 'text-yellow-400',
-      bgColor: 'bg-yellow-400/10'
+      color: 'text-[#4ADE80]',
+      bgColor: 'bg-[#4ADE80]/10'
+
     },
     {
       label: 'REJECTIONS',

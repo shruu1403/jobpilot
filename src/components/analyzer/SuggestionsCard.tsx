@@ -34,7 +34,10 @@ export function SuggestionsCard({ suggestions, active }: SuggestionsCardProps) {
       </div>
 
       <div className="space-y-3">
-        {(hasSuggestions ? suggestions : ["Improvement suggestion placeholder..."]).map((suggestion, i) => (
+        {(hasSuggestions ? suggestions : [
+          "Add missing keywords from the job description naturally into your work experience bullets.",
+          "Reorganize your skills section to prioritize technical tools required for this specific role."
+        ]).map((suggestion, i) => (
           <motion.div
             key={i}
             initial={hasSuggestions ? { opacity: 0, x: -10 } : {}}

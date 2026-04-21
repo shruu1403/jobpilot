@@ -55,8 +55,8 @@ export function JobCard({ job, index }: JobCardProps) {
           {(job.interviewStatus || (job.status === 'Offer' && job.offerProgress !== undefined && job.offerProgress > 0)) && (
             <div className="mb-3">
               {job.interviewStatus && (
-                <div className="bg-[#1C2C28] border border-[#2A443A] rounded-lg p-2">
-                  <div className="flex items-center gap-1.5 text-[#4ADE80] text-[10px] font-bold tracking-wider mb-1">
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2">
+                  <div className="flex items-center gap-1.5 text-yellow-400 text-[10px] font-bold tracking-wider mb-1">
                     <Calendar size={12} />
                     {job.interviewStatus.toUpperCase()}
                   </div>

@@ -175,6 +175,13 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
           body: JSON.stringify({ url: jdInput.trim() }),
         });
         
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+           const text = await res.text();
+           console.error("Non-JSON API response:", text.slice(0, 200));
+           throw new Error("Server returned an invalid response. Please try manual copy-pasting.");
+        }
+
         const data = await res.json();
         if (res.ok && data.text) {
           textToParse = data.text;
@@ -222,10 +229,55 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
         return t.join(', ');
       };
       
+      const extractSalary = (jd: string) => {
+        const lpaMatch = jd.match(/(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*(?:lpa|lakhs?|lakh)/i);
+        if (lpaMatch) return { min: lpaMatch[1], max: lpaMatch[2], period: 'annum' as SalaryPeriod };
+        
+        const singleLpa = jd.match(/(?:upto|up to|salary|ctc|package).*?(\d+(?:\.\d+)?)\s*(?:lpa|lakhs?|lakh)/i);
+        if (singleLpa) return { min: '', max: singleLpa[1], period: 'annum' as SalaryPeriod };
+        
+        const monthMatch = jd.match(/(\d+)(?:k|,\d{3})\s*(?:-|–|—|to)\s*(\d+)(?:k|,\d{3})\s*(?:\/|per\s+)month/i);
+        if (monthMatch) return { min: monthMatch[1], max: monthMatch[2], period: 'month' as SalaryPeriod };
+
+        const genericKMatch = jd.match(/(\d+)(?:k|,\d{3})\s*(?:-|–|—|to)\s*(\d+)(?:k|,\d{3})/i);
+        if (genericKMatch) {
+           const isAnnum = jd.toLowerCase().includes('usd') || jd.includes('$');
+           return { min: genericKMatch[1], max: genericKMatch[2], period: (isAnnum ? 'annum' : 'month') as SalaryPeriod };
+        }
+        return null;
+      };
+
+      const extractInterview = (jd: string) => {
+        const lines = jd.split('\n').map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+           if (line.toLowerCase().includes('interview') || line.toLowerCase().includes('round')) {
+             if (/(am|pm|\d{1,2}:\d{2}|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(line)) {
+                let cleanLine = line.replace(/^(?:interview(?:\s*details)?|scheduled for|timing|time|date)\s*[:\-\u2013]\s*/i, '').slice(0, 100);
+                return { status: "Scheduled", time: cleanLine };
+             }
+           }
+        }
+        return null;
+      };
+      
       const titleHit = extractJobTitle(textToParse);
       setTitle(titleHit);
       setCompany(extractCompany(textToParse) || 'Unknown Company');
       setTags(extractTags(textToParse));
+      
+      const salaryHit = extractSalary(textToParse);
+      if (salaryHit) {
+        setSalaryPeriod(salaryHit.period);
+        setSalaryMin(salaryHit.min);
+        setSalaryMax(salaryHit.max);
+      }
+
+      const interviewHit = extractInterview(textToParse);
+      if (interviewHit) {
+        setStatus('Interview');
+        setInterviewStatus(interviewHit.status);
+        setInterviewTime(interviewHit.time);
+      }
       
       // Save top bit of JD into notes for reference
       setNotes('');

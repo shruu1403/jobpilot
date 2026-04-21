@@ -43,23 +43,29 @@ export function MatchScoreCard({ score, reason, loading }: MatchScoreCardProps) 
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`
-        bg-[#111827] border border-white/5 rounded-[32px] p-10 text-center space-y-8 relative overflow-hidden transition-all duration-700
-        ${score > 0 ? 'opacity-100' : 'opacity-30 grayscale blur-[1px] pointer-events-none'}
-      `}
-    >
-      {/* Decorative Background */}
-      <div className="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/10 rounded-full blur-[80px]" />
-      
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-muted-text uppercase tracking-[0.3em] ml-1">Role Match Probability</h3>
+    <div className={`w-full transition-all duration-700 ${score > 0 ? 'opacity-100' : 'opacity-70 grayscale blur-[1px] pointer-events-none'}`}>
+      {/* Heading Moved Outside */}
+      <div className="flex items-center gap-3 ml-2 mb-4">
+        <div className="w-8 h-8 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+          <Trophy size={14} className="text-green-400" />
+        </div>
+        <div>
+          <h3 className="text-xs font-black text-muted-text uppercase tracking-[0.2em]">Match Probability</h3>
+        </div>
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-[#111827] border border-white/5 rounded-[32px] p-8 sm:p-10 text-center space-y-8 relative overflow-hidden"
+      >
+        {/* Decorative Background */}
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/10 rounded-full blur-[80px]" />
         
-        {/* Circular Progress */}
-        <div className="relative inline-flex items-center justify-center p-4">
-          <svg className="w-56 h-56 transform -rotate-90">
+        <div className="space-y-4">
+          {/* Circular Progress */}
+          <div className="relative inline-flex items-center justify-center p-4">
+            <svg className="w-56 h-56 transform -rotate-90">
             <circle
               cx="112"
               cy="112"
@@ -115,9 +121,9 @@ export function MatchScoreCard({ score, reason, loading }: MatchScoreCardProps) 
 
       {score >= 80 && (
         <div className="absolute top-6 left-6 text-green-400/20">
-          <Trophy size={48} strokeWidth={1} />
         </div>
       )}
     </motion.div>
+    </div>
   );
 }
