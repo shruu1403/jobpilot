@@ -28,9 +28,5 @@ Analyze Jobs: Paste a LinkedIn or Indeed URL. JobPilot scrapes the job details a
 Get Insights: Identify skill gaps, get interview tips, and a "Readiness Score."
 Network: Generate a referral request and track your progress on the dashboard.
 
-👤 Author
-Shruti Gupta
 
-GitHub: @shruu1403
-LinkedIn: in/shruti-gupta
 If you like this project, feel free to ⭐ the repo!
