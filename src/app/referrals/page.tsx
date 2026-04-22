@@ -13,7 +13,7 @@ import { ResumeSelectModal } from "@/components/analyzer/ResumeSelectModal";
 import type { ReferralFormValues, ReferralResponse } from "@/types/referral";
 import type { Resume } from "@/types/resume";
 
-const DAILY_LIMIT = 15;
+// Quotas fetched from server
 
 const initialValues: ReferralFormValues = {
   jobRole: "",
@@ -52,35 +52,20 @@ export default function ReferralsPage() {
   const [usageCount, setUsageCount] = useState<number>(0);
   const [fetchingUsage, setFetchingUsage] = useState(true);
 
-  // Fetch today's usage from Supabase or LocalStorage
+  const isAuthenticated = !!user;
+  const [DAILY_LIMIT, setDAILY_LIMIT] = useState(7);
+
+  // Fetch today's usage from server
   const fetchUsage = async () => {
     try {
-      const today = new Date().toISOString().split("T")[0];
-
-      if (user) {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
-
-        const { count, error } = await supabase
-          .from("referrals")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .gte("created_at", todayStart.toISOString())
-          .lte("created_at", todayEnd.toISOString());
-
-        if (error) throw error;
-        setUsageCount(count || 0);
-      } else {
-        const storedData = localStorage.getItem("jobpilot_referral_quota_guest");
-        if (storedData) {
-          const { date, count } = JSON.parse(storedData);
-          setUsageCount(date === today ? count : 0);
-        } else {
-          setUsageCount(0);
+        const params = new URLSearchParams({ feature: "referral" });
+        if (user?.id) params.set("userId", user.id);
+        const res = await fetch(`/api/quota?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsageCount(data.count || 0);
+          setDAILY_LIMIT(data.limit || 7);
         }
-      }
     } catch (err) {
       console.error("Failed to fetch referral usage:", err);
     } finally {
@@ -115,6 +100,7 @@ export default function ReferralsPage() {
         body: JSON.stringify({
           ...formValues,
           variationSeed: nextVariation,
+          userId: user?.id,
         }),
       }, 25_000);
 
@@ -159,17 +145,17 @@ export default function ReferralsPage() {
         });
       }
 
-      setUsageCount((prev) => {
-        const newCount = prev + 1;
-        if (!user) {
-          const today = new Date().toISOString().split("T")[0];
-          localStorage.setItem(
-            "jobpilot_referral_quota_guest",
-            JSON.stringify({ date: today, count: newCount })
-          );
+      try {
+        const params = new URLSearchParams({ feature: "referral" });
+        if (user?.id) params.set("userId", user.id);
+        const quotaRes = await fetch(`/api/quota?${params}`);
+        if (quotaRes.ok) {
+          const quotaData = await quotaRes.json();
+          setUsageCount(quotaData.count || 0);
         }
-        return newCount;
-      });
+      } catch {
+        setUsageCount((prev) => prev + 1);
+      }
 
       toast.success("Referral drafts generated");
     } catch (error: unknown) {

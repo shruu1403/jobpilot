@@ -29,7 +29,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { exportToPDF, exportToDOCX } from "@/lib/exportUtils";
 
-const DAILY_LIMIT = 5;
+// Quotas are fetched from server now
 
 export default function AnalyzerPage() {
   const { user, loading: authLoading } = useUser();
@@ -74,6 +74,7 @@ export default function AnalyzerPage() {
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   const isAuthenticated = !!user;
+  const [DAILY_LIMIT, setDAILY_LIMIT] = useState(3);
 
   const handleResumeChange = (resume: Resume | null) => {
     setSelectedResume(resume);
@@ -101,32 +102,17 @@ export default function AnalyzerPage() {
 
   useEffect(() => {
     const fetchUsage = async () => {
-      const today = new Date().toISOString().split("T")[0];
-      
-      if (user) {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
-
-        const { count, error } = await supabase
-          .from("analyses")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .gte("created_at", todayStart.toISOString())
-          .lte("created_at", todayEnd.toISOString());
-
-        if (!error) {
-          setDailyAnalyses(count || 0);
+      try {
+        const params = new URLSearchParams({ feature: "analyzer" });
+        if (user?.id) params.set("userId", user.id);
+        const res = await fetch(`/api/quota?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setDailyAnalyses(data.count || 0);
+          setDAILY_LIMIT(data.limit || 3);
         }
-      } else {
-        const storedData = localStorage.getItem("jobpilot_quota_guest");
-        if (storedData) {
-          const { date, count } = JSON.parse(storedData);
-          setDailyAnalyses(date === today ? count : 0);
-        } else {
-          setDailyAnalyses(0);
-        }
+      } catch (err) {
+        console.error("Failed to fetch quota:", err);
       }
     };
     fetchUsage();
@@ -154,22 +140,24 @@ export default function AnalyzerPage() {
     }
   }, [user, searchParams, hasAutoSelected]);
 
-  const incrementQuota = () => {
-    setDailyAnalyses((prev) => {
-      const newCount = prev + 1;
-      if (!user) {
-        const today = new Date().toISOString().split("T")[0];
-        localStorage.setItem(
-          "jobpilot_quota_guest",
-          JSON.stringify({ date: today, count: newCount })
-        );
+  const incrementQuota = async () => {
+    try {
+      const params = new URLSearchParams({ feature: "analyzer" });
+      if (user?.id) params.set("userId", user.id);
+      const res = await fetch(`/api/quota?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyAnalyses(data.count || 0);
       }
-      return newCount;
-    });
+    } catch {
+      setDailyAnalyses((prev) => prev + 1);
+    }
   };
 
   const isRedundant = selectedResume?.id === lastAnalyzedResumeId && jobDescription === lastAnalyzedJD;
   const isLimitReached = dailyAnalyses >= DAILY_LIMIT;
+  // A "meaningful" analysis has a score > 0 — random docs / irrelevant JDs yield 0
+  const isMeaningfulAnalysis = analysisComplete && matchScore > 0;
 
   const handleAnalyze = async () => {
     if (!selectedResume || !jobDescription || isLimitReached || isRedundant) return;
@@ -239,7 +227,7 @@ export default function AnalyzerPage() {
       const analyzeRes = await fetchWithTimeout("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeText, jobDescription }),
+        body: JSON.stringify({ resumeText, jobDescription, userId: user?.id }),
       }, 30_000);
 
       const data = await analyzeRes.json();
@@ -292,9 +280,14 @@ export default function AnalyzerPage() {
         throw new Error(data.error || "Analysis failed");
       }
     } catch (error: any) {
-      const msg = error?.isTimeout 
-        ? "Analysis timed out — the AI service may be busy. Please try again." 
-        : error.message;
+      let msg = error.message || "Analysis failed";
+      if (error?.isTimeout || msg.includes("timed out")) {
+        msg = "Analysis timed out — the AI service may be busy. Please try again.";
+      } else if (msg.includes("503") || msg.includes("high demand") || msg.includes("Service Unavailable")) {
+        msg = "AI service is currently under high demand. Please try again in a moment.";
+      } else if (msg.includes("[GoogleGenerativeAI Error]")) {
+        msg = "AI service is temporarily unavailable. Please try again later.";
+      }
       toast.error(msg);
     } finally {
       setAnalyzing(false);
@@ -546,10 +539,10 @@ export default function AnalyzerPage() {
         </div>
 
         <div className="lg:col-span-12 xl:col-span-4 space-y-6 transition-all duration-1000 xl:mt-[0rem]">
-          <MatchScoreCard score={matchScore} reason={analysisReason} loading={analyzing} />
+          <MatchScoreCard score={matchScore} reason={analysisReason} loading={analyzing} analysisComplete={analysisComplete} />
           
           {/* Placeholder instances in sidebar before analysis begins */}
-          {(!analysisComplete && !analyzing) && (
+          {(!isMeaningfulAnalysis && !analyzing) && (
             <div className="space-y-6 animate-in fade-in zoom-in duration-500">
               <SkillGapsCard gaps={[]} active={false} />
               <SuggestionsCard suggestions={[]} active={false} />
@@ -559,13 +552,13 @@ export default function AnalyzerPage() {
       </div>
 
       {/* AI Insights Section (Expanded below the main grid for better readability) */}
-      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 transition-all duration-1000 overflow-hidden ${analysisComplete || analyzing ? "opacity-100 max-h-[2000px] mt-8" : "opacity-0 max-h-0 mt-0"}`}>
-        <SkillGapsCard gaps={skillGaps} active={analysisComplete} />
-        <SuggestionsCard suggestions={suggestions} active={analysisComplete} />
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 transition-all duration-1000 overflow-hidden ${isMeaningfulAnalysis || analyzing ? "opacity-100 max-h-[2000px] mt-8" : "opacity-0 max-h-0 mt-0"}`}>
+        <SkillGapsCard gaps={skillGaps} active={isMeaningfulAnalysis} />
+        <SuggestionsCard suggestions={suggestions} active={isMeaningfulAnalysis} />
       </div>
 
       {/* NEW: Secondary Features Section (Visible after Analyze) */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-8 sm:pt-10 border-t border-white/5 transition-all duration-1000 ${analysisComplete ? "opacity-100" : "opacity-30 grayscale blur-[1px] pointer-events-none"}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-8 sm:pt-10 border-t border-white/5 transition-all duration-1000 ${isMeaningfulAnalysis ? "opacity-100" : "opacity-30 grayscale blur-[1px] pointer-events-none"}`}>
 
         {/* Cover Letter Block */}
         <div className="bg-gradient-to-br from-[#111827] to-[#0B1220] border border-white/5 rounded-[28px] sm:rounded-[40px] p-6 sm:p-10 flex flex-col justify-start gap-6 relative overflow-hidden group h-fit">

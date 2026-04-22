@@ -18,12 +18,13 @@ export default function SettingsPage() {
   const fetchProfile = useCallback(async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) {
         setLoading(false);
         return;
       }
+      const user = session.user;
 
       setUserId(user.id);
       const isGoogleUser = user.app_metadata?.provider === "google";

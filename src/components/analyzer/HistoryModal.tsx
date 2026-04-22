@@ -55,8 +55,8 @@ export function HistoryModal({
         // Get fresh user ID directly from Supabase auth
         let activeUserId = userId;
         if (!activeUserId) {
-          const { data: { user: authUser } } = await supabase.auth.getUser();
-          activeUserId = authUser?.id || "";
+          const { data: { session } } = await supabase.auth.getSession();
+          activeUserId = session?.user?.id || "";
         }
 
         if (!activeUserId) {

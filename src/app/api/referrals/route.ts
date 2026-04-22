@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, extractJson } from "@/lib/gemini";
+import { checkUsage, incrementUsage, LIMITS } from "@/lib/rateLimit";
 import type { ReferralFormValues } from "@/types/referral";
+
+function getClientIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip")?.trim() || "127.0.0.1";
+}
 
 function buildPrompt(values: ReferralFormValues & { variationSeed?: number }) {
   return `You are writing highly personalized referral outreach.
@@ -53,7 +60,21 @@ Return ONLY strict JSON in this exact shape:
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as ReferralFormValues & { variationSeed?: number };
+    const body = (await request.json()) as ReferralFormValues & { variationSeed?: number; userId?: string };
+
+    // 1. Rate-limit CHECK (don't increment yet)
+    const isGuest = !body.userId;
+    const identifier = isGuest ? getClientIp(request) : (body.userId as string);
+    const type = isGuest ? "ip" : "user";
+
+    const { allowed, limit } = await checkUsage(identifier, type, "referral");
+
+    if (!allowed) {
+      const msg = isGuest
+        ? `Daily limit reached (${limit} referrals/day for guests). Sign in for higher limits.`
+        : `Daily limit reached (${limit} referrals/day). Please try again tomorrow.`;
+      return NextResponse.json({ error: msg }, { status: 429 });
+    }
 
     if (!body.jobRole?.trim() || !body.company?.trim()) {
       return NextResponse.json(
@@ -77,6 +98,9 @@ export async function POST(request: NextRequest) {
     const rawText = await callGemini(prompt, { label: "Referrals", timeoutMs: 20_000 });
     const parsed = extractJson(rawText);
 
+    // 2. Increment usage ONLY on success
+    await incrementUsage(identifier, type, "referral");
+
     return NextResponse.json({
       linkedinMessage: String(parsed.linkedinMessage || "").trim(),
       email: {
@@ -89,20 +113,19 @@ export async function POST(request: NextRequest) {
       typeof error === "object" && error !== null && "status" in error
         ? (error as { status?: number }).status
         : undefined;
-    const message =
-      error instanceof Error ? error.message : "Failed to generate referral drafts.";
+    const message = error instanceof Error ? error.message : "Failed to generate referral drafts.";
     const isTimeout = message.includes("Timed out");
     const is429 = status === 429 || message.includes("429");
+    const is503 = status === 503 || message.includes("503") || message.includes("high demand");
 
-    return NextResponse.json(
-      {
-        error: isTimeout
-          ? "Server busy. Please try again."
-          : is429
-            ? "Rate limit reached. Retry in 1m."
-            : message,
-      },
-      { status: is429 ? 429 : 500 }
-    );
+    const msg = isTimeout
+      ? "Server busy. Please try again."
+      : is429
+      ? "AI rate limit reached. Retry in 1m."
+      : is503
+      ? "AI service is under high demand. Please try again in a moment."
+      : message;
+
+    return NextResponse.json({ error: msg }, { status: is429 ? 429 : 500 });
   }
 }

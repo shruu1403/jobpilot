@@ -114,49 +114,28 @@ export default function UsageCard({ userId }: UsageCardProps) {
 
       setLoading(true);
       try {
-        // Get today's date range
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        // 1. Fetch total resume count
+        const { count: resumeCount } = await supabase
+          .from("resumes")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
 
-        // Parallel fetches
-        const [resumeRes, analysisRes, referralRes, jobRes] = await Promise.all(
-          [
-            // Resume count (total)
-            supabase
-              .from("resumes")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", userId),
+        // 2. Fetch official quota usage from our API (UTC-synced)
+        const [analyzerQuota, referralQuota] = await Promise.all([
+          fetch(`/api/quota?feature=analyzer&userId=${userId}`).then(res => res.json()),
+          fetch(`/api/quota?feature=referral&userId=${userId}`).then(res => res.json())
+        ]);
 
-            // Analyses today
-            supabase
-              .from("analyses")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", userId)
-              .gte("created_at", todayStart.toISOString())
-              .lte("created_at", todayEnd.toISOString()),
-
-            // Referrals today
-            supabase
-              .from("referrals")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", userId)
-              .gte("created_at", todayStart.toISOString())
-              .lte("created_at", todayEnd.toISOString()),
-
-            // All jobs for status grouping
-            supabase
-              .from("jobs")
-              .select("status")
-              .eq("user_id", userId),
-          ]
-        );
+        // 3. Fetch all jobs for status grouping
+        const { data: jobData } = await supabase
+          .from("jobs")
+          .select("status")
+          .eq("user_id", userId);
 
         // Count jobs by status
         const jobsByStatus = { Applied: 0, Interview: 0, Offer: 0, Rejected: 0 };
-        if (jobRes.data) {
-          jobRes.data.forEach((job: { status: string }) => {
+        if (jobData) {
+          jobData.forEach((job: { status: string }) => {
             const s = job.status as keyof typeof jobsByStatus;
             if (s in jobsByStatus) {
               jobsByStatus[s]++;
@@ -165,12 +144,12 @@ export default function UsageCard({ userId }: UsageCardProps) {
         }
 
         setStats({
-          resumeCount: resumeRes.count || 0,
+          resumeCount: resumeCount || 0,
           resumeLimit: 10,
-          analysesToday: analysisRes.count || 0,
-          analysisLimit: 5,
-          referralsToday: referralRes.count || 0,
-          referralLimit: 15,
+          analysesToday: analyzerQuota.count || 0,
+          analysisLimit: analyzerQuota.limit || 5,
+          referralsToday: referralQuota.count || 0,
+          referralLimit: referralQuota.limit || 15,
           jobsByStatus,
         });
       } catch (err) {

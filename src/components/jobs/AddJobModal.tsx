@@ -290,11 +290,12 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
   const handleConnectAnalyzer = async () => {
     setLoadingAnalyses(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
         toast.error("You must be logged in to access history");
         return;
       }
+      const user = session.user;
       
       const { data, error } = await supabase
         .from('analyses')

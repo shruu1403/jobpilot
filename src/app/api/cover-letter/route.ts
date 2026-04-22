@@ -64,9 +64,16 @@ Rules:
     console.error("[CoverLetter] Error:", error);
     const isTimeout = error?.message?.includes("Timed out");
     const is429 = error?.status === 429 || error?.message?.includes("429");
-    return NextResponse.json(
-      { error: isTimeout ? "Generation timed out — please try again." : is429 ? "Rate limit reached. Wait 60s." : `Failed: ${error.message}` },
-      { status: is429 ? 429 : 500 }
-    );
+    const is503 = error?.status === 503 || error?.message?.includes("503") || error?.message?.includes("high demand");
+
+    const msg = isTimeout
+      ? "Generation timed out — please try again."
+      : is429
+      ? "AI rate limit reached. Please wait a minute."
+      : is503
+      ? "AI service is under high demand. Please try again in a moment."
+      : `Failed: ${error.message || "Unknown error"}`;
+
+    return NextResponse.json({ error: msg }, { status: is429 ? 429 : 500 });
   }
 }

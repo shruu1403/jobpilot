@@ -51,7 +51,7 @@ export default function RecentActivity({ isDemo }: { isDemo?: boolean }) {
           .select("*")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(5);
+          .limit(3);
 
         if (error) throw error;
         setActivities((data as ActivityLog[]) || []);
@@ -82,7 +82,7 @@ export default function RecentActivity({ isDemo }: { isDemo?: boolean }) {
         filter: `user_id=eq.${user.id}`
       }, (payload) => {
         setActivities(prev => {
-          const newActivities = [payload.new as ActivityLog, ...prev].slice(0, 5);
+          const newActivities = [payload.new as ActivityLog, ...prev].slice(0, 3);
           return newActivities;
         });
       })

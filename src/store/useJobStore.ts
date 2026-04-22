@@ -38,8 +38,9 @@ export const useJobStore = create<JobStore>((set, get) => ({
   fetchJobs: async () => {
     set({ loading: true });
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const user = session.user;
 
       const { data, error } = await supabase
         .from('jobs')
@@ -63,8 +64,9 @@ export const useJobStore = create<JobStore>((set, get) => ({
     set((state) => ({ jobs: [...state.jobs, job] }));
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not logged in');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not logged in');
+      const user = session.user;
 
       const payload = {
         id: job.id, // Using the frontend generated ID temporarily, or let DB generate

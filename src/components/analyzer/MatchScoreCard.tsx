@@ -14,9 +14,10 @@ interface MatchScoreCardProps {
   score: number;
   reason?: string;
   loading?: boolean;
+  analysisComplete?: boolean;
 }
 
-export function MatchScoreCard({ score, reason, loading }: MatchScoreCardProps) {
+export function MatchScoreCard({ score, reason, loading, analysisComplete }: MatchScoreCardProps) {
   const [displayScore, setDisplayScore] = useState(0);
 
   useEffect(() => {
@@ -42,8 +43,11 @@ export function MatchScoreCard({ score, reason, loading }: MatchScoreCardProps) 
     return "Significant gaps detected; additional experience may be needed.";
   };
 
+  // Show unblurred when analysis is complete (even at 0%) or when score > 0
+  const isVisible = analysisComplete || score > 0;
+
   return (
-    <div className={`w-full transition-all duration-700 ${score > 0 ? 'opacity-100' : 'opacity-70 grayscale blur-[1px] pointer-events-none'}`}>
+    <div className={`w-full transition-all duration-700 ${isVisible ? 'opacity-100' : 'opacity-70 grayscale blur-[1px] pointer-events-none'}`}>
       {/* Heading Moved Outside */}
       <div className="flex items-center gap-3 ml-2 mb-4">
         <div className="w-8 h-8 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">

@@ -68,10 +68,14 @@ EVALUATION RULES:
     console.error("[Readiness] API Error:", error);
     const isTimeout = error?.message?.includes("Timed out");
     const is429 = error?.status === 429 || error?.message?.includes("429");
+    const is503 = error?.status === 503 || error?.message?.includes("503") || error?.message?.includes("high demand");
+
     const msg = isTimeout
       ? "Readiness check is taking too long. Please try again."
       : is429
       ? "API rate limit reached. Please wait and try again."
+      : is503
+      ? "AI service is currently under high demand. Please try again in a moment."
       : `Readiness computation failed: ${error.message || "Unknown error"}`;
     return NextResponse.json({ error: msg }, { status: is429 ? 429 : 500 });
   }

@@ -41,14 +41,37 @@ export function Navbar({ onMenuToggle }: { onMenuToggle?: () => void }) {
     setShowDropdown(false);
     const toastId = toast.loading("Logging out...");
 
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Logout failed!", { id: toastId });
-      setLoggingOut(false);
-    } else {
-      toast.success("Successfully logged out", { id: toastId });
-      window.location.href = "/";
+    // Force-clear all Supabase auth tokens from localStorage to guarantee
+    // the session is destroyed even if signOut() hangs due to Web Locks issues.
+    const forceCleanup = () => {
+      try {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith("sb-") || key.includes("supabase")) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch {
+        // localStorage might be unavailable
+      }
+    };
+
+    try {
+      // Race signOut against a 3-second timeout — if signOut hangs, we proceed anyway
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("signOut timed out")), 3000)
+      );
+
+      await Promise.race([signOutPromise, timeoutPromise]);
+    } catch {
+      // Whether it failed or timed out, we still force-logout below
+      console.warn("signOut did not complete cleanly, forcing logout");
     }
+
+    // Always force-clear and redirect regardless of signOut result
+    forceCleanup();
+    toast.success("Successfully logged out", { id: toastId });
+    window.location.href = "/";
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -68,8 +68,8 @@ export async function callGemini(
 
       const status = err?.status;
 
-      // Rate limited or model not found → try next
-      if (status === 429 || status === 404) {
+      // Rate limited (429), model not found (404), or high demand (503) → try next
+      if (status === 429 || status === 404 || status === 503) {
         console.warn(`[${label}] ${modelName} failed (${status}). Trying next...`);
         continue;
       }
@@ -81,9 +81,15 @@ export async function callGemini(
 
   // All models exhausted
   const is429 = lastError?.status === 429 || lastError?.message?.includes("429");
+  const is503 = lastError?.status === 503 || lastError?.message?.includes("503") || lastError?.message?.includes("high demand");
+
   if (is429) {
     throw new Error("AI rate limit reached. Please wait a minute and try again.");
   }
+  if (is503) {
+    throw new Error("AI service is currently under high demand. Please try again in a moment.");
+  }
+
   throw lastError || new Error(`[${label}] All models failed.`);
 }
 

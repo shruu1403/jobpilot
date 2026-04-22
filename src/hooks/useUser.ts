@@ -53,28 +53,44 @@ function initAuthListener() {
 
   const store = useUserStore.getState();
 
-  // Check initial user
+  // Check initial user — use getSession() which reads from localStorage
+  // and doesn't use the Web Locks API (unlike getUser() which can hang).
   const fetchUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      const user = data?.session?.user || null;
       store.setUser(user);
       if (user) {
         // Run profile fetch without blocking the initial render of user
         store.fetchProfile(user.id);
       }
+    } catch (err) {
+      console.warn("Failed to fetch initial user session:", err);
+      store.setUser(null);
     } finally {
       store.setLoading(false);
     }
   };
 
-  fetchUser();
+  // Timeout safety net — if fetchUser itself somehow hangs, force loading=false after 5s
+  const safetyTimeout = setTimeout(() => {
+    if (useUserStore.getState().loading) {
+      console.warn("Auth initialization timed out, forcing loading=false");
+      store.setUser(null);
+      store.setLoading(false);
+    }
+  }, 5000);
 
-  // Listen for changes
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  fetchUser().finally(() => clearTimeout(safetyTimeout));
+
+  // Listen for changes — keep the handler synchronous to avoid Web Locks issues
+  supabase.auth.onAuthStateChange((_event, session) => {
     const currentUser = session?.user ?? null;
     useUserStore.getState().setUser(currentUser);
     if (currentUser) {
-      await useUserStore.getState().fetchProfile(currentUser.id);
+      // Fire-and-forget (no await) to prevent blocking
+      useUserStore.getState().fetchProfile(currentUser.id);
     }
     useUserStore.getState().setLoading(false);
   });

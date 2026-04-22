@@ -292,10 +292,17 @@ export default function ReadinessHero({
     } catch (err: any) {
       console.error("[ReadinessHero] Error:", err);
       const isTimeout = err?.isTimeout || err?.message?.includes("timed out");
-      setError(isTimeout 
-        ? "AI is taking too long — please retry" 
-        : err.message || "Something went wrong"
-      );
+      let errorMsg = err.message || "Something went wrong";
+      if (isTimeout) {
+        errorMsg = "AI is taking too long — please retry";
+      } else if (errorMsg.includes("503") || errorMsg.includes("high demand") || errorMsg.includes("Service Unavailable")) {
+        errorMsg = "AI service is currently under high demand. Please try again in a moment.";
+      } else if (errorMsg.includes("[GoogleGenerativeAI Error]")) {
+        // Fallback for any other Gemini SDK errors
+        errorMsg = "AI service is temporarily unavailable. Please try again later.";
+      }
+      
+      setError(errorMsg);
       // Provide fallback data so UI doesn't stay empty
       const fallbackData = {
         readiness: 0,
